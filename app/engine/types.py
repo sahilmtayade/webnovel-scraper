@@ -33,3 +33,19 @@ class DebugInfo:
     chapter_count: int
     next_page_url: str | None
     raw_html_snippet: str
+
+
+@dataclass(slots=True)
+class DownloadTick:
+    """Emitted after every chapter attempt during a concurrent download."""
+
+    total: int
+    succeeded: int
+    failed: int  # permanently failed — all retries exhausted
+    rate_limited: int  # subset of failed: rate-limit (429) errors
+    chapter_title: str
+    chapter_index: int
+    error: str | None  # None = success
+    attempt: int = 1  # 1-based attempt number
+    max_attempts: int = 1  # total attempts allowed (including first try)
+    active_workers: int = 1  # worker threads in use for this download phase

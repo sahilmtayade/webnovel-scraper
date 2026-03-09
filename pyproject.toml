@@ -10,7 +10,7 @@ version = "0.1.0"
 description = "Modular webnovel scraper and EPUB generator using the Astral stack"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [ # High-level requests with browser fingerprints
+dependencies = [
     "playwright", # Browser automation backup
     "playwright-stealth", # Bypass bot detection
     "rapidfuzz>=3.9.0", # Fuzzy string matching
