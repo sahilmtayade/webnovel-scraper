@@ -1,0 +1,49 @@
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[project]
+name = "webnovel-scraper"
+version = "0.1.0"
+description = "Modular webnovel scraper and EPUB generator using the Astral stack"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [ # High-level requests with browser fingerprints
+    "playwright", # Browser automation backup
+    "playwright-stealth", # Bypass bot detection
+    "rapidfuzz>=3.9.0", # Fuzzy string matching
+    "ebooklib>=0.18", # EPUB generation
+    "beautifulsoup4>=4.12.0", # HTML parsing/cleaning
+    "rich>=13.0.0", # Professional terminal output
+    "pydantic>=2.0.0", # Data validation
+    "python-dotenv>=1.0.0",
+    "curl-cffi>=0.14.0",
+]
+
+[project.scripts]
+webnovel-scraper = "app.main:main"
+
+[dependency-groups]
+dev = [
+    "ruff",  # Linter/Formatter
+    "ty",  # Astral's Type Checker
+    "pytest",
+    "pre-commit",
+]
+
+[tool.ruff]
+line-length = 100
+exclude = [".venv", "__pycache__", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "W", "N", "SIM", "TID"]
+ignore = ["E501"]
+unfixable = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+pythonpath = ["app"]

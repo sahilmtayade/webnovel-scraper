@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search demon&#x27;s - Novel Live - Reading Novel Free</title>
+    <meta name="description" content="Search demon&#x27;s for best novels online free, Search daily updated demon&#x27;s novel - Novel Live - Reading Novel Free">
+    <meta name="keywords" content="Novel Live, Read Novel Live, Light Novel Pub, Reading Novel Free, Reading Novel Online, Novel updates, Free Novels Online, Light Novel, Read light novel, Light novel translations, Free books online">
+    <meta name="image" content="https://novellive.app//images/novel-logo.png">
+    <meta itemprop="name" content="Search demon&#x27;s - Novel Live - Reading Novel Free">
+    <meta itemprop="description" content="Search demon&#x27;s for best novels online free, Search daily updated demon&#x27;s novel - Novel Live - Reading Novel Free">
+    <meta property="og:title" content="Search demon&#x27;s - Novel Live - Reading Novel Free">
+    <meta property="og:description" content="Search demon&#x27;s for best novels online free, Search daily updated demon&#x27;s novel - Novel Live - Reading Novel Free">
+    <meta property="og:url" content="https://novellive.app/">
+    <link rel="canonical" href="https://novellive.app/search/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Novel Live"/>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=5.0' />
+    <meta name="robots" content="index,follow" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge,chrome=1">
+    <link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico" media="screen">
+    <link rel="preload" href="/fonts/RobotoCondensed-Regular.woff" as="font" crossorigin="anonymous">
+    <link rel="preload" href="/fonts/glyphicons-halflings-regular.woff2" as="font" crossorigin="anonymous">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/font.css">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.0/jquery.min.js"></script>
+    <script type="text/javascript" src="/js/lib.js"></script>
+	<script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+    <script async data-cfasync="false" src="https://cdn.pubfuture-ad.com/v2/unit/pt.js" type="text/javascript"></script>
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-88GYG4MDVP"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-88GYG4MDVP');
+</script>
+</head>
+<body class>
+        <div class="header">
+            <div class="head">
+                <div class="wp">
+                    <div class="head-pc">
+                        <div class="logo">
+                            <a href="/"><img src="/images/novel-logo.png" alt="Read Novels Online Free"
+                                    title="Read Novels Online Free" /></a>
+                        </div>
+                        <ul class="ul-nav">
+                            <li>
+                                <div id="navbar-novel-list" class="v1">
+                                    <span class="glyphicon glyphicon-list"></span>
+                                    Novel list
+                                    <div class="caret"></div>
+                                </div>
+                                <div id="dropdown-novel-list" class="m-dl">
+                                    <dl class="d1">
+                                        <dd><a href="https://novellive.app/history/"><span class="glyphicon glyphicon-bookmark"></span>Your
+                                                Reading Novels</a></dd>
+                                        <dd><a href="https://novellive.app/list/latest-novels/"><span
+                                                    class="glyphicon glyphicon-edit"></span>Latest Novels</a></dd>
+                                        <dd><a href="https://novellive.app/list/latest-release-novels/"><span
+                                                    class="glyphicon glyphicon-refresh"></span>Latest Release</a></dd>
+                                        <dd><a href="https://novellive.app/list/most-popular-novels/"><span class="glyphicon glyphicon-fire"></span>Most
+                                                Popular</a></dd>
+                                        <dd><a href="https://novellive.app/list/completed-novels/"><span
+                                                    class="glyphicon glyphicon-check"></span>Completed Novels</a></dd>
+                                    </dl>
+                                </div>
+                            </li>
+                            <li>
+                                <div id="navbar-genre" class="v1">
+                                    <span class="glyphicon glyphicon-list"></span>
+                                    Genres
+                                    <div class="caret"></div>
+                                </div>
+                                <div id="dropdown-genre" class="m-dl m-dl-1">
+                                    <dl class="d2">
+                                        <dd><a href="/genres/Action/" class="a1">Action</a></dd>
+                                        <dd><a href="/genres/Adult/">Adult</a></dd>
+                                        <dd><a href="/genres/Adventure/" class="a2">AdventCure</a></dd>
+                                        <dd><a href="/genres/Comedy/">Comedy</a></dd>
+                                        <dd><a href="/genres/Drama/">Drama</a></dd>
+                                        <dd><a href="/genres/Ecchi/">Ecchi</a></dd>
+                                        <dd><a href="/genres/Fantasy/">Fantasy</a></dd>
+                                        <dd><a href="/genres/Gender+Bender/">Gender
+                                                Bender</a></dd>
+                                        <dd><a href="/genres/Harem/">Harem</a></dd>
+                                    </dl>
+                                    <dl class="d2">
+                                        <dd><a href="/genres/Historical/">Historical</a></dd>
+                                        <dd><a href="/genres/Horror/">Horror</a></dd>
+                                        <dd><a href="/genres/Josei/">Josei</a></dd>
+                                        <dd><a href="/genres/Game/">Game</a></dd>
+                                        <dd><a href="/genres/Martial+Arts/" class="a3">Martial Arts</a></dd>
+                                        <dd><a href="/genres/Mature/">Mature</a></dd>
+                                        <dd><a href="/genres/Mecha/">Mecha</a></dd>
+                                        <dd><a href="/genres/Mystery/">Mystery</a></dd>
+                                        <dd><a href="/genres/Psychological/">Psychological</a></dd>
+                                    </dl>
+                                    <dl class="d2">
+                                        <dd><a href="/genres/Romance/" class="a4">Romance</a></dd>
+                                        <dd><a href="/genres/School+Life/">School Life</a></dd>
+                                        <dd><a href="/genres/Sci-fi/">Sci-fi</a></dd>
+                                        <dd><a href="/genres/Seinen/">Seinen</a></dd>
+                                        <dd><a href="/genres/Shoujo/">Shoujo</a></dd>
+                                        <dd><a href="/genres/Shounen+Ai/">Shounen Ai</a></dd>
+                                        <dd><a href="/genres/Shounen/">Shounen</a></dd>
+                                        <dd><a href="/genres/Slice+of+Life/">Slice of
+                                                Life</a></dd>
+                                        <dd><a href="/genres/Smut/">Smut</a></dd>
+                                    </dl>
+                                    <dl class="d2">
+                                        <dd><a href="/genres/Sports/">Sports</a></dd>
+                                        <dd><a href="/genres/Supernatural/" class="a5">Supernatural</a></dd>
+                                        <dd><a href="/genres/Tragedy/">Tragedy</a></dd>
+                                        <dd><a href="/genres/Wuxia/">Wuxia</a></dd>
+                                        <dd><a href="/genres/Xianxia/">Xianxia</a></dd>
+                                        <dd><a href="/genres/Xuanhuan/">Xuanhuan</a></dd>
+                                        <dd><a href="/genres/Yaoi/">Yaoi</a></dd>
+                                        <dd><a href="/genres/Eastern/">Eastern</a></dd>
+                                        <dd><a href="/genres/Reincarnation/">Reincarnation</a></dd>
+                                    </dl>
+                                </div>
+                            </li>
+                            <script>
+                                $('.ul-nav li').click(function(e) {
+        					        e.stopPropagation();
+        					        $(this).siblings().find('.m-dl').stop().hide();
+        					        $(this).find('.m-dl').stop().toggle();
+        					    })
+        					    $("body").click(function() {
+        					        $('.ul-nav li').find('.m-dl').stop().slideUp();
+        					    });
+        		                </script>
+                        </ul>
+                        <div class="light-switch">
+                        </div>
+                        <div class="hdr">
+                            <a href="javascript:;" class="share-qr js-qr" aria-label="QR to share link">
+                                <i class="glyphicon glyphicon-qrcode"></i>
+                                <div class="hv-img">
+                                </div>
+                            </a>
+                           
+                            <a href="https://novellive.app/history/" class="reading" title="Your Reading Novels"></a> 
+                            <div class="soBox">
+                                <form action="/search/" method="post" class="inp" id="form">
+                                    <input type="text" class="inp" id="searchkey" name="searchkey" placeholder="Search..." />
+                                    <button type="submit" class="btn" title="Search">
+                                        <span class="glyphicon glyphicon-search"></span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="nav-m">
+                            <div class="light-switch ">
+                            </div>
+                           
+                            <a href="https://novellive.app/history/" class="reading" title="Your Reading Novels"></a> 
+                            <span class="menuBtn"><b></b><b></b><b></b></span>
+                        </div>
+                        <script>
+                            var thisURL = document.URL;
+                            var tit = document.title
+                            var img =  "<img src='https://chart.googleapis.com/chart?cht=qr&chs=180x180&choe=UTF-8&chld=L|4&chl="
+                                        + thisURL + "'  alt='" + tit + "' />"; 
+                            $('.hv-img').append( img );  
+        
+                            $('.share-qr').click(function (e) { 
+                                e.stopPropagation();
+                                $(this).find('.hv-img').stop().slideToggle();
+                            });
+                            $('body').click(function (e) { 
+                                $('.hv-img').stop().slideUp();
+                            });
+                            $('.menuBtn').append('<b></b><b></b><b></b>');
+                            $('.menuBtn').click(function (event) {
+                                $(this).toggleClass('open');
+                                $('.head-m').stop().slideToggle();
+                            });
+                        </script>
+                    </div>
+                </div>
+                <div class="head-m" style="display: none;">
+                    <ul class="ul-nav TAB_CLICK" id=".m-taber">
+                        <li class="">
+                            <a href="javascript:;" class="v1">
+                                <span class="glyphicon glyphicon-list"></span>
+                                Novel list
+                                <div class="caret"></div>
+                            </a>
+                        </li>
+                        <li class="">
+                            <a href="javascript:;" class="v1">
+                                <span class="glyphicon glyphicon-list"></span>
+                                Genres
+                                <div class="caret"></div>
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="m-taber" style="display: none;">
+                        <div class="m-dl">
+                            <dl class="d1">
+                                <dd><a href="https://novellive.app/history/"><span class="glyphicon glyphicon-bookmark"></span>Your
+                                                Reading Novels</a></dd>
+                                <dd><a href="https://novellive.app/list/latest-novels/"><span class="glyphicon glyphicon-edit"></span>Latest
+                                        Novels</a></dd>
+                                <dd><a href="https://novellive.app/list/latest-release-novels/"><span
+                                            class="glyphicon glyphicon-refresh"></span>Latest Release</a></dd>
+                                <dd><a href="https://novellive.app/list/most-popular-novels/"><span class="glyphicon glyphicon-fire"></span>Most
+                                        Popular</a></dd>
+                                <dd><a href="https://novellive.app/list/completed-novels/"><span class="glyphicon glyphicon-check"></span>Completed
+                                        Novels</a></dd>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class="m-taber" style="display: none;">
+                        <div class="m-dl m-dl-1">
+                            <dl class="d2">
+                                <dd><a href="/genres/Action/" class="a1">Action</a></dd>
+                                <dd><a href="/genres/Adult/">Adult</a></dd>
+                                <dd><a href="/genres/Adventure/" class="a2">Adventure</a></dd>
+                                <dd><a href="/genres/Comedy/">Comedy</a></dd>
+                                <dd><a href="/genres/Drama/">Drama</a></dd>
+                                <dd><a href="/genres/Ecchi/">Ecchi</a></dd>
+                                <dd><a href="/genres/Fantasy/">Fantasy</a></dd>
+                                <dd><a href="/genres/Gender+Bender/">Gender Bender</a></dd>
+                                <dd><a href="/genres/Harem/">Harem</a></dd>
+                                <dd><a href="/genres/Historical/">Historical</a></dd>
+                                <dd><a href="/genres/Horror/">Horror</a></dd>
+                                <dd><a href="/genres/Josei/">Josei</a></dd>
+                                <dd><a href="/genres/Game/">Game</a></dd>
+                                <dd><a href="/genres/Martial+Arts/" class="a3">Martial Arts</a></dd>
+                                <dd><a href="/genres/Mature/">Mature</a></dd>
+                                <dd><a href="/genres/Mecha/">Mecha</a></dd>
+                                <dd><a href="/genres/Mystery/">Mystery</a></dd>
+                                <dd><a href="/genres/Psychological/">Psychological</a></dd>
+                                <dd><a href="/genres/Romance/" class="a4">Romance</a></dd>
+                                <dd><a href="/genres/School+Life/">School Life</a></dd>
+                                <dd><a href="/genres/Sci-fi/">Sci-fi</a></dd>
+                                <dd><a href="/genres/Seinen/">Seinen</a></dd>
+                                <dd><a href="/genres/Shoujo/">Shoujo</a></dd>
+                                <dd><a href="/genres/Shounen+Ai/">Shounen Ai</a></dd>
+                                <dd><a href="/genres/Shounen/">Shounen</a></dd>
+                                <dd><a href="/genres/Slice+of+Life/">Slice of Life</a></dd>
+                                <dd><a href="/genres/Smut/">Smut</a></dd>
+                                <dd><a href="/genres/Sports/">Sports</a></dd>
+                                <dd><a href="/genres/Supernatural/" class="a5">Supernatural</a></dd>
+                                <dd><a href="/genres/Tragedy/">Tragedy</a></dd>
+                                <dd><a href="/genres/Wuxia/">Wuxia</a></dd>
+                                <dd><a href="/genres/Xianxia/">Xianxia</a></dd>
+                                <dd><a href="/genres/Xuanhuan/">Xuanhuan</a></dd>
+                                <dd><a href="/genres/Yaoi/">Yaoi</a></dd>
+                                <dd><a href="/genres/Eastern/">Eastern</a></dd>
+                                <dd><a href="/genres/Reincarnation/">Reincarnation</a></dd>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class="soBox">
+                        <form action="/search/" method="post" class="inp" id="m_form">
+                            <input type="text" class="inp" id="m_searchkey" name="searchkey" placeholder="Search..." />
+                            <button type="submit" class="btn" title="Search">
+                                <span class="glyphicon glyphicon-search"></span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+                <div class="cur">
+                    <div class="wp">
+                        <a href="/" class="home" title="Read Novel Online"><span class="glyphicon glyphicon-home"></span>
+                            Home</a>
+                        <i></i>
+                        <a href="/search" title="Search">Search</a>
+                    </div>
+                </div>
+            </div>        <div class="main">
+    <div class="wp">
+        <div class="m-t1">
+            <em class="num">8</em>
+            <em class="e1">Keyword:&nbsp;</em>
+            <em class="e2">demon&#x27;s</em>
+        </div>
+        <div class="row-box">
+            <div class="col-content">
+                <div class="ul-list1 ul-list1-2 ss-custom">
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/demons-diary">
+                                        <img src="https://media.novellive.app/novel/demons-diary.jpg"
+                                            alt="Demon&#x27;s Diary" title="Demon&#x27;s Diary">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/demons-diary" title="Demon&#x27;s Diary">Demon&#x27;s Diary</a></h3>
+                                    <div class="core">
+                                        <span>4.0</span>
+                                        <i
+                                            style="background-image: url(/images/40star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Gravity Tales</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/xianxia"
+                                                            class="novel"
+                                                            title="XIANXIA Novels"
+                                                        >Xianxia</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/fantasy"
+                                                            class="novel"
+                                                            title="FANTASY Novels"
+                                                        >Fantasy</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/demons-diary/chapter-1188-things-are-different"
+                                                    class="chapter"
+                                                    title="Chapter 1188: Things Are Different"
+                                                >
+                                                <span
+                                                    class="s1"
+                                                >1554
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/record-of-a-demons-cultivation">
+                                        <img src="https://media.novellive.app/novel/record-of-a-demons-cultivation.jpg"
+                                            alt="Record of a Demon&#x27;s Cultivation" title="Record of a Demon&#x27;s Cultivation">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/record-of-a-demons-cultivation" title="Record of a Demon&#x27;s Cultivation">Record of a Demon&#x27;s Cultivation</a></h3>
+                                    <div class="core">
+                                        <span>3.0</span>
+                                        <i
+                                            style="background-image: url(/images/30star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Fanqie Novel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/fantasy"
+                                                            class="novel"
+                                                            title="FANTASY Novels"
+                                                        >Fantasy</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/martial-arts"
+                                                            class="novel"
+                                                            title="MARTIAL ARTS Novels"
+                                                        >Martial arts</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/record-of-a-demons-cultivation/chapter-422-the-light-of-human-nature"
+                                                    class="chapter"
+                                                    title="Chapter 422: The Light of Human Nature"
+                                                >
+                                                <span
+                                                    class="s1"
+                                                >422
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/demons-virtue">
+                                        <img src="https://media.novellive.app/novel/demons-virtue.jpg"
+                                            alt="Demon&#x27;s Virtue" title="Demon&#x27;s Virtue">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/demons-virtue" title="Demon&#x27;s Virtue">Demon&#x27;s Virtue</a></h3>
+                                    <div class="core">
+                                        <span>4.2</span>
+                                        <i
+                                            style="background-image: url(/images/40star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Webnovel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/fantasy"
+                                                            class="novel"
+                                                            title="FANTASY Novels"
+                                                        >Fantasy</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/adventure"
+                                                            class="novel"
+                                                            title="ADVENTURE Novels"
+                                                        >Adventure</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/demons-virtue/chapter-785-potion-brewing"
+                                                    class="chapter"
+                                                    title="Chapter 785: Potion Brewing"
+                                                >
+                                                <span
+                                                    class="s1"
+                                                >785
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/rest-in-a-demons-embrace-bl">
+                                        <img src="https://media.novellive.app/novel/rest-in-a-demons-embrace-bl.jpg"
+                                            alt="Rest in a Demon&#x27;s Embrace [BL]" title="Rest in a Demon&#x27;s Embrace [BL]">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/rest-in-a-demons-embrace-bl" title="Rest in a Demon&#x27;s Embrace [BL]">Rest in a Demon&#x27;s Embrace [BL]</a></h3>
+                                    <div class="core">
+                                        <span>4.5</span>
+                                        <i
+                                            style="background-image: url(/images/45star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Webnovel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/lgbt+"
+                                                            class="novel"
+                                                            title="LGBT+ Novels"
+                                                        >Lgbt+</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/rest-in-a-demons-embrace-bl/chapter-238-summer-palace"
+                                                    class="chapter"
+                                                    title="Chapter 238 Summer Palace"
+                                                >
+                                                <span
+                                                    class="s1"
+                                                >238
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/a-demons-journey">
+                                        <img src="https://media.novellive.app/novel/a-demons-journey.jpg"
+                                            alt="A Demon&#x27;s Journey" title="A Demon&#x27;s Journey">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/a-demons-journey" title="A Demon&#x27;s Journey">A Demon&#x27;s Journey</a></h3>
+                                    <div class="core">
+                                        <span>NaN</span>
+                                        <i
+                                            style="background-image: url(/images/00star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Webnovel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/fantasy"
+                                                            class="novel"
+                                                            title="FANTASY Novels"
+                                                        >Fantasy</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/action"
+                                                            class="novel"
+                                                            title="ACTION Novels"
+                                                        >Action</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/a-demons-journey/chapter-644-trump-card-of-great-qin-empire"
+                                                    class="chapter"
+                                                    title="Chapter 644 Trump Card of Great Qin Empire"
+                                                >
+                                                <span
+                                                    class="s1"
+                                                >644
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/the-demons-bride">
+                                        <img src="https://media.novellive.app/novel/the-demons-bride.jpg"
+                                            alt="The Demon&#x27;s Bride" title="The Demon&#x27;s Bride">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/the-demons-bride" title="The Demon&#x27;s Bride">The Demon&#x27;s Bride</a></h3>
+                                    <div class="core">
+                                        <span>3.9</span>
+                                        <i
+                                            style="background-image: url(/images/35star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Webnovel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/fantasy"
+                                                            class="novel"
+                                                            title="FANTASY Novels"
+                                                        >Fantasy</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/romance"
+                                                            class="novel"
+                                                            title="ROMANCE Novels"
+                                                        >Romance</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/the-demons-bride/chapter-755"
+                                                    class="chapter"
+                                                    title="Chapter 755: Goodbye-II"
+                                                >
+                                                    <span class="s2">Full</span>
+                                                <span
+                                                    class="s1"
+                                                >755
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/the-demons-soul">
+                                        <img src="https://media.novellive.app/novel/the-demons-soul.jpg"
+                                            alt="The Demon&#x27;s Soul" title="The Demon&#x27;s Soul">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/the-demons-soul" title="The Demon&#x27;s Soul">The Demon&#x27;s Soul</a></h3>
+                                    <div class="core">
+                                        <span>4.0</span>
+                                        <i
+                                            style="background-image: url(/images/40star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Webnovel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/romance"
+                                                            class="novel"
+                                                            title="ROMANCE Novels"
+                                                        >Romance</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/drama"
+                                                            class="novel"
+                                                            title="DRAMA Novels"
+                                                        >Drama</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/the-demons-soul/chapter-80"
+                                                    class="chapter"
+                                                    title="Chapter 80 Epilogue- Part 2"
+                                                >
+                                                    <span class="s2">Full</span>
+                                                <span
+                                                    class="s1"
+                                                >80
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="li-row">
+                        <div class="li">
+                            <div class="con">
+                                <div class="pic">
+                                    <a href="https://novellive.app/book/unrivaled-demons-odyssey">
+                                        <img src="https://media.novellive.app/novel/unrivaled-demons-odyssey.jpg"
+                                            alt="Unrivaled Demon&#x27;s Odyssey" title="Unrivaled Demon&#x27;s Odyssey">
+                                    </a>
+                                </div>
+                                <div class="txt">
+                                    <h3 class="tit"><a href="https://novellive.app/book/unrivaled-demons-odyssey" title="Unrivaled Demon&#x27;s Odyssey">Unrivaled Demon&#x27;s Odyssey</a></h3>
+                                    <div class="core">
+                                        <span>4.2</span>
+                                        <i
+                                            style="background-image: url(/images/40star.png); background-size: 100% 100%;"
+                                        ></i>
+                                    </div>
+                                    <div class="desc">
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-globe chi-tiet-icon"></span>
+                                            <div class="right">
+                                                    <em class="e1">Webnovel</em>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="glyphicon glyphicon-th-list chi-tiet-icon"></span>
+                                            <div class="right">
+                                                        
+                                                        <a
+                                                            href="https://novellive.app/genres/harem"
+                                                            class="novel"
+                                                            title="HAREM Novels"
+                                                        >Harem</a>
+                                                        , 
+                                                        <a
+                                                            href="https://novellive.app/genres/fantasy"
+                                                            class="novel"
+                                                            title="FANTASY Novels"
+                                                        >Fantasy</a>
+                                            </div>
+                                        </div>
+                                        <div class="item">
+                                            <span class="big-image2-hide glyphicon glyphicon-book chi-tiet-icon"></span>
+                                            <div class="right">
+                                                <a
+                                                    href="https://novellive.app/book/unrivaled-demons-odyssey/chapter-213-detective-nero"
+                                                    class="chapter"
+                                                    title="Chapter 213 - Detective Nero"
+                                                >
+                                                <span
+                                                    class="s1"
+                                                >213
+                                                    Chapters</span></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-slide">
+                <div class="m-newest m-newest-1">
+                    <div class="col-l">
+                        <div class="g-tit">
+                            <h3 class="tit"><span class="glyphicon glyphicon-check"></span> Search Tips</h3>
+                        </div>
+                        <ul class="ul-list4">
+                            <li>- If there are no results, try with shorter keywords</li>
+                            <li>- Only 50 results are displayed</li>
+                        </ul>
+                    </div>
+                    <div class="col-r">
+                        <div class="g-tit">
+                            <h3 class="tit"><span class="glyphicon glyphicon-th-list"></span> Genres</h3>
+                        </div>
+                        <ul class="ul-list3">
+                            <li class="l1">
+                                <a href="/genres/Action/" class="con" title="Action Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Action</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Adult/" class="con" title="Adult Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Adult</a>
+                            </li>
+                            <li class="l2">
+                                <a href="/genres/Adventure/" class="con" title="Adventure Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Adventure</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Comedy/" class="con" title="Comedy Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Comedy</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Drama/" class="con" title="Drama Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Drama</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Ecchi/" class="con" title="Ecchi Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Ecchi</a>
+                            </li>
+                            <li class="l5">
+                                <a href="/genres/Fantasy/" class="con" title="Fantasy Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Fantasy</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Gender+Bender/" class="con" title="Gender Bender Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Gender Bender</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Harem/" class="con" title="Harem Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Harem</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Historical/" class="con" title="Historical Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Historical</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Horror/" class="con" title="Horror Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Horror</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Josei/" class="con" title="HJosei Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Josei</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Game/" class="con" title="Game Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Game</a>
+                            </li>
+                            <li class="l3">
+                                <a href="/genres/Martial+Arts/" class="con" title="Martial Arts Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Martial Arts</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Mature/" class="con" title="Mature Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Mature</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Mecha/" class="con" title="Mecha Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Mecha</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Mystery/" class="con" title="Mystery Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Mystery</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Psychological/" class="con" title="Psychological Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Psychological</a>
+                            </li>
+                            <li class="l4">
+                                <a href="/genres/Romance/" class="con" title="Romance Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Romance</a>
+                            </li>
+                            <li>
+                                <a href="/genres/School+Life/" class="con" title="School Life Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>School Life</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Sci-fi/" class="con" title="Sci-fi Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Sci-fi</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Seinen/" class="con" title="Seinen Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Seinen</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Shoujo/" class="con" title="Shoujo Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Shoujo</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Shounen+Ai/" class="con" title="Shounen Ai Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Shounen Ai</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Shounen/" class="con" title="Shounen Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Shounen</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Slice+of+Life/" class="con" title="Slice of Life Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Slice of Life</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Smut/" class="con" title="Smut Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Smut</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Sports/" class="con" title="Sports Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Sports</a>
+                            </li>
+                            <li class="l5">
+                                <a href="/genres/Supernatural/" class="con" title="Supernatural Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Supernatural</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Tragedy/" class="con" title="Tragedy Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Tragedy</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Wuxia/" class="con" title="Wuxia Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Wuxia</a>
+                            </li>
+                            <li class="l2">
+                                <a href="/genres/Xianxia/" class="con" title="Xianxia Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Xianxia</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Xuanhuan/" class="con" title="Xuanhuan Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Xuanhuan</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Yaoi/" class="con" title="Yaoi Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Yaoi</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Eastern/" class="con" title="Eastern Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Eastern</a>
+                            </li>
+                            <li>
+                                <a href="/genres/Reincarnation/" class="con" title="Reincarnation Novels"><span
+                                        class="glyphicon glyphicon-ok-sign"></span>Reincarnation</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <a href="javascript:;" id="goTop" style="display: none;">
+            <span class="glyphicon glyphicon-circle-arrow-up"></span>
+        </a>
+    </div>
+</div>
+        <div class="footer">
+        <div class="wp">
+        <div class="ll">
+        <a href="https://novellive.app/" title="Reading Novel Free">NOVEL LIVE - READING NOVEL FREE</a><br>Read Books Online &amp; Free Novels Online
+        </div>
+        <div class="rr">
+        <a href="https://novellive.app/contact/" title="Contact us">Contact</a> - <a href="https://novellive.app/sitemap.xml" title="Sitemap" target="_blank">Sitemap</a>
+        <br><a href="https://novellive.app/privacy-terms-of-use/" title="Privacy &amp; Terms of use"> Privacy &amp; Terms of use</a>
+        </div>
+        </div>
+        </div>            <div id="pf-10541-1"><script>window.pubfuturetag = window.pubfuturetag || [];window.pubfuturetag.push({unit: "66c7fa2a1f6e9c5d9f624aba", id: "pf-10541-1"})</script></div>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"c699aa37922f4c78bd6f6625773dbb8f","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
