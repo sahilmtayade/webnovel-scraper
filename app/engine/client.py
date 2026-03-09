@@ -5,7 +5,6 @@ import threading
 import time
 from dataclasses import dataclass
 from dataclasses import dataclass as _plain_dataclass
-from dataclasses import field as _dc_field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
