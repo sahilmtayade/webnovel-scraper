@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import threading
 import time
 from collections import deque
 from pathlib import Path
@@ -557,6 +558,7 @@ def run_download(
     start_time = time.monotonic()
     status_msg: list[str] = [""]  # mutable singleton updated during retry waits
     retrying_indices: set[int] = set()  # chapters currently in retry queue
+    latest_tick: list[DownloadTick | None] = [None]  # most recent tick for background refresh
     client = engine._client  # for worker-state access in display
 
     def _make_display(tick: DownloadTick | None = None) -> Group:
@@ -664,6 +666,7 @@ def run_download(
         return Group(*parts)
 
     def on_tick(tick: DownloadTick) -> None:
+        latest_tick[0] = tick
         progress.update(task_id, completed=tick.succeeded + tick.failed)
         is_final = tick.error is None or tick.attempt == tick.max_attempts
 
@@ -688,14 +691,31 @@ def run_download(
         status_msg[0] = msg
         live.update(_make_display())
 
+    _stop_refresh = threading.Event()
+
+    def _refresh_loop() -> None:
+        """Drive live countdown updates at ~10 Hz whenever any worker is sleeping."""
+        while not _stop_refresh.wait(0.1):
+            with client._ws_lock:
+                has_sleeping = any(w.state == "sleep" for w in client.worker_states.values())
+            if has_sleeping:
+                live.update(_make_display(latest_tick[0]))
+
+    _refresh_thread = threading.Thread(target=_refresh_loop, daemon=True, name="display-refresh")
+
     with Live(_make_display(), console=console, refresh_per_second=10) as live:
-        book = engine.download_chapters(
-            book_meta,
-            on_tick=on_tick,
-            on_status=on_status,
-            start_chapter=start_chapter,
-            end_chapter=end_chapter,
-        )
+        _refresh_thread.start()
+        try:
+            book = engine.download_chapters(
+                book_meta,
+                on_tick=on_tick,
+                on_status=on_status,
+                start_chapter=start_chapter,
+                end_chapter=end_chapter,
+            )
+        finally:
+            _stop_refresh.set()
+            _refresh_thread.join(timeout=0.5)
 
     output_path = epub_builder.build(book=book, output_dir=output_dir)
 
