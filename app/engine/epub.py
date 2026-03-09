@@ -31,6 +31,8 @@ class EpubBuilder:
 
         epub_chapters: list[epub.EpubHtml] = []
         for chapter in book.chapters:
+            if chapter.content_html is None:
+                continue  # skip stubs outside the requested range
             epub_chapter = self._chapter_to_epub(chapter)
             epub_book.add_item(epub_chapter)
             epub_chapters.append(epub_chapter)

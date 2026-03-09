@@ -7,11 +7,14 @@ Algorithm (mirrors TCP congestion control):
 - Success (N+ in a row): interval *= RECOVERY_FACTOR  (fast multiplicative climb
           once the server is clearly happy; recovers from 1.6 s to 0.05 s in ~34
           clean requests instead of ~155 with the flat-step approach).
-- Throttle: interval *= BACKOFF_FACTOR (multiplicative decrease),
+- Throttle: interval *= BACKOFF_FACTOR (×1.5, not ×2 — gentler ramp),
             persist ``interval * 2`` as the next run's starting value,
             reset the consecutive-success counter to 0.
 - wait():   globally serialises all requests for a domain so N concurrent
             threads don't inadvertently multiply the true rate.
+            Slots further than PREBOOKING_CAP (3 s) in the future are never
+            pre-booked; threads poll instead, preventing multi-worker slot
+            stacking that would otherwise produce 100+ s sleep queues.
 """
 
 from __future__ import annotations
@@ -27,10 +30,11 @@ _CACHE_FILE = Path.home() / ".cache" / "webnovel-scraper" / "rates.json"
 _MIN_INTERVAL: float = 0.05  # ceiling:  20 req/s
 _MAX_INTERVAL: float = 30.0  # floor:    1 req/30 s
 _ADDITIVE_STEP: float = 0.01  # flat step used for the first few successes
-_BACKOFF_FACTOR: float = 2.0  # double the interval on every throttle signal
+_BACKOFF_FACTOR: float = 1.5  # multiply interval by this on every throttle signal
 _RECOVERY_FACTOR: float = 0.9  # multiply interval by this after N consecutive successes
 _RECOVERY_THRESHOLD: int = 5  # switch to multiplicative recovery after this many in a row
 _CACHE_START_CAP: float = 5.0  # never start above this regardless of what was cached
+_PREBOOKING_CAP: float = 3.0  # don't pre-book a slot more than this many seconds in the future
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +94,11 @@ class RateController:
     def wait(self, on_sleep: Callable[[float], None] | None = None) -> None:
         """Block until the next request slot is available, then claim it.
 
-        The lock is held only while computing and reserving the deadline so
-        concurrent callers queue up without sleeping under the lock.
+        When the queue depth is shallow (sleep < _PREBOOKING_CAP) the slot is
+        claimed immediately.  When many threads are already stacked and the
+        next available slot is far away, this thread polls every 250 ms rather
+        than pre-booking a slot deep in the future — preventing the "138 s
+        sleep" stacking problem that occurs when the interval suddenly jumps.
 
         Parameters
         ----------
@@ -99,10 +106,16 @@ class RateController:
             Called with the sleep duration (seconds) *before* sleeping begins.
             Useful for updating live status displays.
         """
-        with self._lock:
-            now = time.monotonic()
-            sleep_for = max(0.0, self._last_sent + self._interval - now)
-            self._last_sent = now + sleep_for
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                sleep_for = max(0.0, self._last_sent + self._interval - now)
+                if sleep_for < _PREBOOKING_CAP:
+                    # Slot is close enough — claim it.
+                    self._last_sent = now + sleep_for
+                    break
+            # Queue is full; yield and retry rather than stacking far-future slots.
+            time.sleep(0.25)
 
         if sleep_for > 0.0:
             if on_sleep is not None:
