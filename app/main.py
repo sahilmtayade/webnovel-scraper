@@ -227,12 +227,21 @@ def _ask_int(
 
 def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine:
     """Show and optionally edit runtime settings; returns a (possibly new) engine."""
+    client = engine._client
     tbl = Table(title="Current settings", show_header=True)
     tbl.add_column("Setting", style="bold cyan")
     tbl.add_column("Value", justify="right")
     tbl.add_row("Workers", str(engine._max_workers))
-    tbl.add_row("Page-load delay (s)", f"{engine._client.page_load_delay:.1f}")
-    tbl.add_row("Max browser sessions", str(engine._client.max_browser_sessions))
+    tbl.add_row("Page-load delay (s)", f"{client.page_load_delay:.1f}")
+    tbl.add_row("Max browser sessions", str(client.max_browser_sessions))
+    tbl.add_row(
+        "Backoff factor",
+        f"{client.backoff_factor:.2f}  [dim](>1 — how much to slow down on throttle)[/dim]",
+    )
+    tbl.add_row(
+        "Recovery factor",
+        f"{client.recovery_factor:.2f}  [dim](<1 — how fast to speed up on success)[/dim]",
+    )
     console.print(tbl)
     console.print("[dim]Press Enter to keep the current value.[/dim]\n")
 
@@ -240,20 +249,30 @@ def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine
     delay_raw = _ask(
         console,
         "Page-load delay (s)",
-        default=str(engine._client.page_load_delay),
+        default=str(client.page_load_delay),
     )
     try:
         new_delay = float(delay_raw)
     except ValueError:
-        new_delay = engine._client.page_load_delay
-    new_browsers = _ask_int(
-        console, "Max browser sessions", default=engine._client.max_browser_sessions
-    )
+        new_delay = client.page_load_delay
+    new_browsers = _ask_int(console, "Max browser sessions", default=client.max_browser_sessions)
+    backoff_raw = _ask(console, "Backoff factor", default=f"{client.backoff_factor:.2f}")
+    try:
+        new_backoff = max(1.01, float(backoff_raw))
+    except ValueError:
+        new_backoff = client.backoff_factor
+    recovery_raw = _ask(console, "Recovery factor", default=f"{client.recovery_factor:.2f}")
+    try:
+        new_recovery = max(0.5, min(0.99, float(recovery_raw)))
+    except ValueError:
+        new_recovery = client.recovery_factor
 
     changed = (
         new_workers != engine._max_workers
-        or new_delay != engine._client.page_load_delay
-        or new_browsers != engine._client.max_browser_sessions
+        or new_delay != client.page_load_delay
+        or new_browsers != client.max_browser_sessions
+        or new_backoff != client.backoff_factor
+        or new_recovery != client.recovery_factor
     )
     if not changed:
         console.print("[dim]No changes.[/dim]")
@@ -262,7 +281,9 @@ def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine
     rebuilt = ScraperEngine.with_defaults(
         page_load_delay=new_delay,
         max_workers=new_workers or engine._max_workers,
-        max_browser_sessions=new_browsers or engine._client.max_browser_sessions,
+        max_browser_sessions=new_browsers or client.max_browser_sessions,
+        backoff_factor=new_backoff,
+        recovery_factor=new_recovery,
     )
     console.print("[green]Settings updated.[/green]")
     return rebuilt
@@ -673,7 +694,8 @@ def run_download(
         if tick.error is None:
             retrying_indices.discard(tick.chapter_index)
             suffix = f" (retry {tick.attempt})" if tick.attempt > 1 else ""
-            log.append(("✓", "green", f"{tick.chapter_title}{suffix}"))
+            proxy_tag = f" [proxy #{tick.proxy_num}]" if tick.proxy_num is not None else ""
+            log.append(("✓", "green", f"{tick.chapter_title}{suffix}{proxy_tag}"))
         elif not is_final:
             # Will be retried — add to in-flight set
             retrying_indices.add(tick.chapter_index)

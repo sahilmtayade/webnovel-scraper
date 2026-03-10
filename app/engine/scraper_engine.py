@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -10,6 +11,7 @@ from bs4 import BeautifulSoup
 from rapidfuzz import fuzz
 
 from app.engine.client import NetworkClient
+from app.engine.rate import _DEFAULT_BACKOFF_FACTOR, _DEFAULT_RECOVERY_FACTOR
 from app.engine.types import DebugInfo, DownloadTick, SearchCandidate, SearchOutcome
 from app.models import Book, Chapter
 from app.scrapers.base import BaseScraper
@@ -43,12 +45,16 @@ class ScraperEngine:
     def with_defaults(
         cls,
         page_load_delay: float = 1.0,
-        max_workers: int = 6,
+        max_workers: int = 8,
         max_browser_sessions: int = 3,
+        backoff_factor: float = _DEFAULT_BACKOFF_FACTOR,
+        recovery_factor: float = _DEFAULT_RECOVERY_FACTOR,
     ) -> ScraperEngine:
         client = NetworkClient(
             page_load_delay=page_load_delay,
             max_browser_sessions=max_browser_sessions,
+            backoff_factor=backoff_factor,
+            recovery_factor=recovery_factor,
         )
         return cls(
             scrapers=[
@@ -85,7 +91,7 @@ class ScraperEngine:
                     candidates.append(SearchCandidate(book=book, score=score))
             except Exception as exc:  # noqa: BLE001
                 print(
-                    f"[webnovel-scraper] Scraper {scraper.site_name!r} failed during search: {exc}"
+                    f"[webnovel-scraper] Scraper {scraper.site_name!r} failed during search: {exc}\n{traceback.format_exc()}"
                 )
                 continue
 
@@ -136,6 +142,8 @@ class ScraperEngine:
 
         # Final results keyed by chapter index; filled in as chapters resolve.
         results: dict[int, Chapter] = {}
+        # Proxy number (1-based) used for each chapter; populated by worker threads.
+        proxy_nums: dict[int, int | None] = {}
         # Chapters still needing another attempt: list of (stub, last_error).
         to_retry: list[tuple[Chapter, str]] = []
 
@@ -172,6 +180,8 @@ class ScraperEngine:
                     result = scraper.fetch_chapter(ch.url, ch.index)
                 finally:
                     self._client.clear_worker()
+                # Capture proxy_num here, while still on the worker thread.
+                proxy_nums[ch.index] = self._client.get_last_proxy_num()
                 elapsed = time.monotonic() - t0
                 # EMA update of average fetch time (used by _optimal_workers).
                 self._avg_fetch_time_s = (
@@ -200,6 +210,7 @@ class ScraperEngine:
                             error=None,
                             attempt=1,
                             max_attempts=_MAX_CHAPTER_ATTEMPTS,
+                            proxy_num=proxy_nums.get(stub.index),
                         )
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -242,6 +253,8 @@ class ScraperEngine:
                         result = scraper.fetch_chapter(stub.url, stub.index)
                     finally:
                         self._client.clear_worker()
+                    # Capture proxy_num here, while still on the (sequential retry) thread.
+                    proxy_nums[stub.index] = self._client.get_last_proxy_num()
                     results[stub.index] = result
                     succeeded += 1
                     _emit(
@@ -256,6 +269,7 @@ class ScraperEngine:
                             attempt=attempt_n,
                             max_attempts=_MAX_CHAPTER_ATTEMPTS,
                             active_workers=dynamic_workers,
+                            proxy_num=proxy_nums.get(stub.index),
                         )
                     )
                 except Exception as exc:  # noqa: BLE001

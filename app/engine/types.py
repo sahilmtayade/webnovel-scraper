@@ -49,3 +49,4 @@ class DownloadTick:
     attempt: int = 1  # 1-based attempt number
     max_attempts: int = 1  # total attempts allowed (including first try)
     active_workers: int = 1  # worker threads in use for this download phase
+    proxy_num: int | None = None  # 1-based proxy that successfully delivered this chapter

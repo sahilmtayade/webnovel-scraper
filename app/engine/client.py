@@ -14,7 +14,39 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 
-from app.engine.rate import RateController
+from app.engine.rate import (
+    _DEFAULT_BACKOFF_FACTOR,
+    _DEFAULT_RECOVERY_FACTOR,
+    _PROXY_START_INTERVAL,
+    RateController,
+)
+
+# Typed proxy files at the project root — bare host:port lines are auto-prefixed.
+_ROOT = Path(__file__).resolve().parent.parent.parent
+# How many different proxies to try per fetch before giving up.
+_MAX_PROXY_TRIES = 8
+# Warm-up probe: short timeout and a reliable HTTPS target.
+_PROXY_PROBE_TIMEOUT: float = 8.0
+_PROXY_PROBE_URL = "https://www.google.com"
+# curl error codes that indicate a broken/dead proxy (not a server-side issue).
+_PROXY_CURL_ERRORS = (
+    "curl: (5)",  # CURLE_COULDNT_RESOLVE_PROXY
+    "curl: (6)",  # CURLE_COULDNT_RESOLVE_HOST  (via broken proxy)
+    "curl: (7)",  # CURLE_COULDNT_CONNECT
+    "curl: (28)",  # CURLE_OPERATION_TIMEDOUT
+    "curl: (35)",  # CURLE_SSL_CONNECT_ERROR / recv failure
+    "curl: (43)",  # CURLE_BAD_FUNCTION_ARGUMENT — invalid response header from proxy
+    "curl: (47)",  # CURLE_TOO_MANY_REDIRECTS (proxy loop)
+    "curl: (56)",  # CURLE_RECV_ERROR — CONNECT tunnel failed
+    "curl: (60)",  # CURLE_SSL_CACERT — SSL certificate problem
+    "curl: (97)",  # CURLE_PROXY
+)
+_PROXY_FOLDER = _ROOT / "proxies"
+_PROXY_FILES: list[tuple[Path, str]] = [
+    (_PROXY_FOLDER / "proxies_http.txt", "http"),
+    (_PROXY_FOLDER / "proxies_socks4.txt", "socks4"),
+    (_PROXY_FOLDER / "proxies_socks5.txt", "socks5"),
+]
 
 
 @_plain_dataclass
@@ -25,6 +57,7 @@ class WorkerState:
     label: str = ""  # chapter title currently being fetched
     state: str = "idle"  # "idle" | "fetch" | "sleep"
     sleep_until: float = 0.0  # monotonic deadline; 0 = not sleeping
+    proxy_num: int | None = None  # 1-based proxy index used for the last successful request
 
 
 _COOKIE_CACHE = Path.home() / ".cache" / "webnovel-scraper" / "cookies.json"
@@ -46,10 +79,14 @@ class NetworkClient:
         timeout_seconds: float = 20.0,
         page_load_delay: float = 1.0,
         max_browser_sessions: int = 3,
+        backoff_factor: float = _DEFAULT_BACKOFF_FACTOR,
+        recovery_factor: float = _DEFAULT_RECOVERY_FACTOR,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.page_load_delay = page_load_delay
         self.max_browser_sessions = max_browser_sessions
+        self.backoff_factor = backoff_factor
+        self.recovery_factor = recovery_factor
         self._rate_controllers: dict[str, RateController] = {}
         self._rc_lock = threading.Lock()
         self._cookies: dict[str, dict[str, str]] = self._load_cookies()
@@ -60,6 +97,142 @@ class NetworkClient:
         self.worker_states: dict[int, WorkerState] = {}
         self._ws_lock = threading.Lock()
         self._worker_counter: int = 0
+        # Proxy rotation — loaded once at startup from proxies.txt.
+        self._proxies: list[str] = self._load_proxies()
+        self._proxy_index: int = 0
+        self._proxy_lock = threading.Lock()
+        if self._proxies:
+            print(f"[webnovel-scraper] Loaded {len(self._proxies)} proxies (http/socks4/socks5)")
+            self._warm_proxies()
+
+    # ------------------------------------------------------------------
+    # Proxy helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load_proxies() -> list[str]:
+        """Read all typed proxy files and return a combined list of proxy URLs.
+
+        Each file has an associated default scheme (http / socks4 / socks5).
+        Lines that already contain ``://`` are used verbatim; bare ``host:port``
+        entries are prefixed with the file's default scheme.
+        Lines starting with ``#`` and blank lines are ignored.
+        """
+        proxies: list[str] = []
+        for path, scheme in _PROXY_FILES:
+            if not path.exists():
+                continue
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "://" in line:
+                    proxies.append(line)
+                else:
+                    proxies.append(f"{scheme}://{line}")
+        return proxies
+
+    def _warm_proxies(self) -> None:
+        """Test every loaded proxy in parallel and blacklist the dead ones.
+
+        Spawns one thread per proxy so all probes run simultaneously.
+        A proxy is kept if it reaches ``_PROXY_PROBE_URL`` without a
+        transport error within ``_PROXY_PROBE_TIMEOUT`` seconds.
+        Non-transport errors (e.g. HTTP 403 from the probe target) mean
+        the proxy is alive and working — only curl connection failures
+        are treated as dead.
+        """
+        total = len(self._proxies)
+        print(
+            f"[webnovel-scraper] Probing {total} proxies in parallel "
+            f"(timeout {_PROXY_PROBE_TIMEOUT}s) …"
+        )
+        alive: list[int] = [0]
+        alive_lock = threading.Lock()
+
+        def _probe(proxy_url: str) -> None:
+            proxy = {"http": proxy_url, "https": proxy_url}
+            try:
+                cffi_requests.get(
+                    _PROXY_PROBE_URL,
+                    timeout=_PROXY_PROBE_TIMEOUT,
+                    allow_redirects=True,
+                    impersonate="chrome120",
+                    proxies=proxy,
+                )
+                with alive_lock:
+                    alive[0] += 1
+            except Exception as exc:
+                if self._is_proxy_error(exc):
+                    self._blacklist_proxy(proxy)
+                else:
+                    # Reachable but returned an unusual response — proxy is live.
+                    with alive_lock:
+                        alive[0] += 1
+
+        snapshot = list(self._proxies)  # copy before any concurrent mutations
+        threads = [threading.Thread(target=_probe, args=(p,), daemon=True) for p in snapshot]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        removed = total - alive[0]
+        print(
+            f"[webnovel-scraper] Proxy warm-up done: "
+            f"{alive[0]}/{total} alive" + (f", {removed} removed" if removed else "") + "."
+        )
+
+    def _next_proxy(self) -> tuple[dict[str, str] | None, int | None]:
+        """Return (proxy_dict, 1-based proxy number) in round-robin order.
+
+        Returns ``(None, None)`` when no proxies are loaded.
+        """
+        with self._proxy_lock:
+            if not self._proxies:
+                return None, None
+            num = self._proxy_index % len(self._proxies)  # 0-based position
+            proxy = self._proxies[num]
+            self._proxy_index += 1
+        return {"http": proxy, "https": proxy}, num + 1  # 1-based
+
+    def get_last_proxy_num(self) -> int | None:
+        """Return the 1-based proxy number used for the last successful request
+        on the calling thread, or ``None`` if no proxy was used.
+        """
+        tid = threading.get_ident()
+        with self._ws_lock:
+            ws = self.worker_states.get(tid)
+            return ws.proxy_num if ws is not None else None
+
+    def _blacklist_proxy(self, proxy: dict[str, str]) -> None:
+        """Remove a dead proxy from the pool so it is never used again."""
+        url = proxy.get("https") or proxy.get("http")
+        if not url:
+            return
+        with self._proxy_lock:
+            try:
+                self._proxies.remove(url)
+                print(
+                    f"[webnovel-scraper] Removed dead proxy: {url} ({len(self._proxies)} remaining)"
+                )
+            except ValueError:
+                pass  # already removed by another thread
+
+    @staticmethod
+    def _is_proxy_error(exc: BaseException) -> bool:
+        """Return True when *exc* (or any chained cause) looks like a proxy-transport failure.
+
+        curl_cffi sometimes wraps a CurlError inside a ValueError when the proxy
+        sends a malformed response (e.g. curl: (43) invalid response header).
+        We walk the full exception chain so those wrapped errors are caught too.
+        """
+        node: BaseException | None = exc
+        while node is not None:
+            if any(token in str(node).casefold() for token in _PROXY_CURL_ERRORS):
+                return True
+            node = node.__context__ if node.__cause__ is None else node.__cause__
+        return False
 
     # ------------------------------------------------------------------
     # Cookie persistence
@@ -132,7 +305,13 @@ class NetworkClient:
         domain = urlparse(url).netloc.casefold()
         with self._rc_lock:
             if domain not in self._rate_controllers:
-                self._rate_controllers[domain] = RateController(domain)
+                start = _PROXY_START_INTERVAL if self._proxies else None
+                self._rate_controllers[domain] = RateController(
+                    domain,
+                    start_interval=start,
+                    backoff_factor=self.backoff_factor,
+                    recovery_factor=self.recovery_factor,
+                )
             return self._rate_controllers[domain]
 
     # ------------------------------------------------------------------
@@ -183,23 +362,51 @@ class NetworkClient:
             # the jar object itself, raising an AttributeError.
             headers = self._cookie_header(url)
 
-            if method.upper() == "POST":
-                response = cffi_requests.post(
-                    url,
-                    data=data or {},
-                    headers=headers,
-                    timeout=self.timeout_seconds,
-                    allow_redirects=True,
-                    impersonate="chrome120",
-                )
-            else:
-                response = cffi_requests.get(
-                    url,
-                    headers=headers,
-                    timeout=self.timeout_seconds,
-                    allow_redirects=True,
-                    impersonate="chrome120",
-                )
+            # --- proxy retry inner loop -----------------------------------
+            # Try up to _MAX_PROXY_TRIES proxies for transport errors.
+            # These failures must NOT affect the rate-limit state.
+            response = None
+            _used_proxy_num: int | None = None
+            _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
+            for _ in range(_proxy_tries):
+                proxy, proxy_num = self._next_proxy()
+                try:
+                    if method.upper() == "POST":
+                        response = cffi_requests.post(
+                            url,
+                            data=data or {},
+                            headers=headers,
+                            timeout=self.timeout_seconds,
+                            allow_redirects=True,
+                            impersonate="chrome120",
+                            proxies=proxy,
+                        )
+                    else:
+                        response = cffi_requests.get(
+                            url,
+                            headers=headers,
+                            timeout=self.timeout_seconds,
+                            allow_redirects=True,
+                            impersonate="chrome120",
+                            proxies=proxy,
+                        )
+                    _used_proxy_num = proxy_num
+                    break  # transport succeeded — exit proxy-retry loop
+                except Exception as exc:
+                    if proxy is not None and self._is_proxy_error(exc):
+                        self._blacklist_proxy(proxy)
+                        continue  # try the next proxy
+                    raise  # not a proxy issue — propagate normally
+            # Store the winning proxy number in WorkerState for callers to read.
+            with self._ws_lock:
+                ws = self._ws_get_or_create(tid)
+                ws.proxy_num = _used_proxy_num
+            # --------------------------------------------------------------
+
+            if response is None:
+                # Every proxy attempt failed — treat as a transient error.
+                last_status, last_text = 503, "All proxies failed"
+                continue
 
             last_status = int(response.status_code)
             last_text = response.text
@@ -245,13 +452,27 @@ class NetworkClient:
     def get_binary(self, url: str) -> bytes | None:
         rc = self._get_rate_controller(url)
         rc.wait()
-        response = cffi_requests.get(
-            url,
-            headers=self._cookie_header(url),
-            timeout=self.timeout_seconds,
-            allow_redirects=True,
-            impersonate="chrome120",
-        )
+        response = None
+        _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
+        for _ in range(_proxy_tries):
+            proxy, _pn = self._next_proxy()
+            try:
+                response = cffi_requests.get(
+                    url,
+                    headers=self._cookie_header(url),
+                    timeout=self.timeout_seconds,
+                    allow_redirects=True,
+                    impersonate="chrome120",
+                    proxies=proxy,
+                )
+                break
+            except Exception as exc:
+                if proxy is not None and self._is_proxy_error(exc):
+                    self._blacklist_proxy(proxy)
+                    continue
+                raise
+        if response is None:
+            return None
         status = int(response.status_code)
         if status == 429:
             rc.throttled()

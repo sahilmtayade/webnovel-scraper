@@ -30,11 +30,12 @@ _CACHE_FILE = Path.home() / ".cache" / "webnovel-scraper" / "rates.json"
 _MIN_INTERVAL: float = 0.05  # ceiling:  20 req/s
 _MAX_INTERVAL: float = 30.0  # floor:    1 req/30 s
 _ADDITIVE_STEP: float = 0.01  # flat step used for the first few successes
-_BACKOFF_FACTOR: float = 1.5  # multiply interval by this on every throttle signal
-_RECOVERY_FACTOR: float = 0.9  # multiply interval by this after N consecutive successes
+_DEFAULT_BACKOFF_FACTOR: float = 1.2  # multiply interval by this on every throttle signal
+_DEFAULT_RECOVERY_FACTOR: float = 0.7  # multiply interval by this after N consecutive successes
 _RECOVERY_THRESHOLD: int = 5  # switch to multiplicative recovery after this many in a row
 _CACHE_START_CAP: float = 5.0  # never start above this regardless of what was cached
 _PREBOOKING_CAP: float = 3.0  # don't pre-book a slot more than this many seconds in the future
+_PROXY_START_INTERVAL: float = 0.2  # aggressive start interval when proxies are in use
 
 
 # ---------------------------------------------------------------------------
@@ -68,17 +69,30 @@ def _persist(domain: str, interval: float) -> None:
 class RateController:
     """AIMD adaptive rate limiter for a single domain."""
 
-    def __init__(self, domain: str, default_interval: float = _MIN_INTERVAL) -> None:
+    def __init__(
+        self,
+        domain: str,
+        default_interval: float = _MIN_INTERVAL,
+        start_interval: float | None = None,
+        backoff_factor: float = _DEFAULT_BACKOFF_FACTOR,
+        recovery_factor: float = _DEFAULT_RECOVERY_FACTOR,
+    ) -> None:
         self.domain = domain
+        self.backoff_factor = backoff_factor
+        self.recovery_factor = recovery_factor
         self._lock = threading.Lock()
 
-        saved = _load_all().get(domain)
-        # Start from the cached safe interval BUT cap it so a previous ban can't
-        # force the next run to crawl at e.g. 30 s/req from the very first request.
-        if saved is not None:
-            self._interval: float = max(_MIN_INTERVAL, min(saved / 2.0, _CACHE_START_CAP))
+        if start_interval is not None:
+            # Caller explicitly requests an aggressive start — ignore cached value.
+            self._interval: float = max(_MIN_INTERVAL, start_interval)
         else:
-            self._interval: float = default_interval
+            saved = _load_all().get(domain)
+            # Start from the cached safe interval BUT cap it so a previous ban can't
+            # force the next run to crawl at e.g. 30 s/req from the very first request.
+            if saved is not None:
+                self._interval: float = max(_MIN_INTERVAL, min(saved / 2.0, _CACHE_START_CAP))
+            else:
+                self._interval: float = default_interval
         self._last_sent: float = 0.0  # monotonic timestamp of the last request slot
         self._consecutive_successes: int = 0  # reset to 0 on every throttle signal
 
@@ -133,8 +147,8 @@ class RateController:
         with self._lock:
             self._consecutive_successes += 1
             if self._consecutive_successes >= _RECOVERY_THRESHOLD:
-                # Multiplicative climb: 1.6 s → 0.05 s in ~34 requests.
-                self._interval = max(_MIN_INTERVAL, self._interval * _RECOVERY_FACTOR)
+                # Multiplicative climb using the (possibly user-tuned) recovery_factor.
+                self._interval = max(_MIN_INTERVAL, self._interval * self.recovery_factor)
             else:
                 # Additive probe: cautious while we have few consecutive wins.
                 self._interval = max(_MIN_INTERVAL, self._interval - _ADDITIVE_STEP)
@@ -143,7 +157,7 @@ class RateController:
         """Multiplicatively increase the interval and persist a conservative value."""
         with self._lock:
             self._consecutive_successes = 0
-            self._interval = min(_MAX_INTERVAL, self._interval * _BACKOFF_FACTOR)
+            self._interval = min(_MAX_INTERVAL, self._interval * self.backoff_factor)
             to_save = self._interval * 2.0
             domain = self.domain
         # Persist outside the lock to avoid holding it during I/O.
