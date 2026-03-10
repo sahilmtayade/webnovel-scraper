@@ -1,6 +1,6 @@
 # webnovel-scraper
 
-Professional modular webnovel scraper and EPUB generator.
+Professional modular webnovel scraper and EPUB generator. Uses playwright stealth as a last resort to pass challenges.
 
 ## Requirements
 
