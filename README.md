@@ -30,6 +30,10 @@ uv run webnovel-scraper
 The interactive UI includes a **Settings** menu where you can adjust all runtime
 parameters without restarting (workers, rate factors, delays, etc.).
 
+Fuzzy Search lets you quickly find a novel by title, even with typos or partial input.
+![Interactive Fuzzy Search](<assets/Screenshot 2026-03-09 034218.png>)
+
+
 ### Search
 
 Search for a novel title and see fuzzy-matched candidates:
@@ -45,6 +49,9 @@ Download a novel and generate an EPUB in the `output/` directory:
 ```bash
 uv run webnovel-scraper download https://novellive.app/book/shadow-slave
 ```
+Downloading a chapter via interactive mode:
+![Downloading Progress Picture](assets/vlcsnap-2026-03-09-22h20m45s034.png)
+
 
 Options:
 
