@@ -13,3 +13,5 @@ wheels/
 *cache*
 .egg-info
 proxies/*
+
+responses/*
