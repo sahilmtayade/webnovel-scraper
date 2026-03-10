@@ -150,3 +150,70 @@ uv run ruff check app/
 uv run ruff format app/
 uv run ty check app/
 ```
+
+## Contributing
+
+Contributions are welcome — whether it's a bug report, a feature request, or a brand-new
+scraper source.
+
+### Raising issues
+
+Please [open an issue](https://github.com/sahilmtayade/webnovel-scraper/issues) and include:
+
+- The URL you were trying to scrape
+- The full traceback / error output
+- Your Python version (`python --version`) and OS
+
+### Adding a new scraper source
+
+Every source is a self-contained file in `app/scrapers/`.  Three steps:
+
+**1. Create `app/scrapers/mysite.py`** and subclass `BaseScraper`:
+
+```python
+from app.engine.client import NetworkClient
+from app.models import Book, Chapter
+from app.scrapers.base import BaseScraper
+
+class MySiteScraper(BaseScraper):
+    site_name = "mysite"                          # short identifier used in metadata
+    domains   = ("mysite.com", "www.mysite.com")  # domains this scraper handles
+
+    def __init__(self, client: NetworkClient) -> None:
+        self.client = client
+
+    def can_handle(self, url: str) -> bool:
+        return any(d in url for d in self.domains)
+
+    def search(self, query: str) -> list[Book]:
+        ...  # return a list of Book stubs (no chapters needed)
+
+    def fetch_book(self, url: str) -> Book:
+        ...  # return Book with a stub Chapter list (content_html=None for each)
+
+    def fetch_chapter(self, url: str, index: int) -> Chapter:
+        ...  # return a single Chapter with content_html populated
+```
+
+**2. Register it** in `ScraperEngine.with_defaults()` inside
+`app/engine/scraper_engine.py`:
+
+```python
+from app.scrapers.mysite import MySiteScraper
+
+return cls(
+    scrapers=[
+        FreeWebNovelScraper(client=client),
+        MySiteScraper(client=client),   # ← add this line
+    ],
+    ...
+)
+```
+
+**3. Open a PR** — please include a short description of the site and any quirks
+(pagination style, bot-detection behaviour, etc.).
+
+`NetworkClient` handles HTTP, rate-limiting, proxy rotation, and Playwright
+fallback automatically, so your scraper only needs to parse HTML.  Look at
+[app/scrapers/freewebnovel.py](app/scrapers/freewebnovel.py) for a real-world reference
+implementation.
