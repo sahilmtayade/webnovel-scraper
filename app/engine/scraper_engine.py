@@ -142,6 +142,7 @@ class ScraperEngine:
         succeeded = 0
         failed = 0
         rate_limited = 0
+        interrupted = False
 
         # Final results keyed by chapter index; filled in as chapters resolve.
         results: dict[int, Chapter] = {}
@@ -196,45 +197,62 @@ class ScraperEngine:
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {executor.submit(_fetch, ch): ch for ch in chapters_to_fetch}
-            for future in as_completed(futures):
-                stub = futures[future]
-                try:
-                    result = future.result()
-                    results[stub.index] = result
-                    succeeded += 1
-                    _emit(
-                        DownloadTick(
-                            total=total,
-                            succeeded=succeeded,
-                            failed=failed,
-                            rate_limited=rate_limited,
-                            chapter_title=result.title,
-                            chapter_index=stub.index,
-                            error=None,
-                            attempt=1,
-                            max_attempts=_MAX_CHAPTER_ATTEMPTS,
-                            proxy_num=proxy_nums.get(stub.index),
+            try:
+                for future in as_completed(futures):
+                    stub = futures[future]
+                    try:
+                        result = future.result()
+                        results[stub.index] = result
+                        succeeded += 1
+                        _emit(
+                            DownloadTick(
+                                total=total,
+                                succeeded=succeeded,
+                                failed=failed,
+                                rate_limited=rate_limited,
+                                chapter_title=result.title,
+                                chapter_index=stub.index,
+                                error=None,
+                                attempt=1,
+                                max_attempts=_MAX_CHAPTER_ATTEMPTS,
+                                proxy_num=proxy_nums.get(stub.index),
+                            )
                         )
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    to_retry.append((stub, str(exc)))
-                    _emit(
-                        DownloadTick(
-                            total=total,
-                            succeeded=succeeded,
-                            failed=failed,
-                            rate_limited=rate_limited,
-                            chapter_title=stub.title,
-                            chapter_index=stub.index,
-                            error=str(exc),
-                            attempt=1,
-                            max_attempts=_MAX_CHAPTER_ATTEMPTS,
+                    except Exception as exc:  # noqa: BLE001
+                        to_retry.append((stub, str(exc)))
+                        _emit(
+                            DownloadTick(
+                                total=total,
+                                succeeded=succeeded,
+                                failed=failed,
+                                rate_limited=rate_limited,
+                                chapter_title=stub.title,
+                                chapter_index=stub.index,
+                                error=str(exc),
+                                attempt=1,
+                                max_attempts=_MAX_CHAPTER_ATTEMPTS,
+                            )
                         )
-                    )
+            except KeyboardInterrupt:
+                interrupted = True
+                if on_status is not None:
+                    on_status("Download interrupted — finalizing partial book...")
+                for future in futures:
+                    if not future.done():
+                        future.cancel()
+
+        if interrupted:
+            if on_status is not None:
+                on_status("Finalizing partial book after interruption...")
+                on_status("")
+
+            fetched = {ch.index: ch for ch in results.values()}
+            merged = [fetched.get(ch.index, ch) for ch in all_chapters]
+            return book.model_copy(update={"chapters": merged})
 
         # ── Phase 2: sequential retries with backoff ───────────────────────────
         for attempt_n in range(2, _MAX_CHAPTER_ATTEMPTS + 1):
-            if not to_retry:
+            if not to_retry or interrupted:
                 break
             # Recompute after each backoff: interval may have changed.
             dynamic_workers = self._optimal_workers(book.url)
@@ -246,10 +264,20 @@ class ScraperEngine:
                     f"(attempt {attempt_n}/{_MAX_CHAPTER_ATTEMPTS}, "
                     f"waiting {backoff:.0f}s…)"
                 )
-            time.sleep(backoff)
+            try:
+                time.sleep(backoff)
+            except KeyboardInterrupt:
+                interrupted = True
+                if on_status is not None:
+                    on_status(
+                        "Download interrupted during retry backoff — finalizing partial book..."
+                    )
+                break
 
             still_failing: list[tuple[Chapter, str]] = []
             for stub, _ in to_retry:
+                if interrupted:
+                    break
                 try:
                     self._client.set_worker_label(stub.title)
                     try:
@@ -275,6 +303,11 @@ class ScraperEngine:
                             proxy_num=proxy_nums.get(stub.index),
                         )
                     )
+                except KeyboardInterrupt:
+                    interrupted = True
+                    if on_status is not None:
+                        on_status("Download interrupted during retry — finalizing partial book...")
+                    break
                 except Exception as exc:  # noqa: BLE001
                     error_msg = str(exc)
                     if is_last:
@@ -301,6 +334,8 @@ class ScraperEngine:
                             active_workers=dynamic_workers,
                         )
                     )
+            if interrupted:
+                break
             to_retry = still_failing
 
         if on_status is not None:

@@ -183,6 +183,21 @@ class NetworkClient:
             f"{alive[0]}/{total} alive" + (f", {removed} removed" if removed else "") + "."
         )
 
+    def _reset_proxies(self) -> None:
+        """Reload proxy files and warm them up again when the pool is exhausted."""
+        proxies = self._load_proxies()
+        if not proxies:
+            return
+
+        with self._proxy_lock:
+            self._proxies = proxies
+            self._proxy_index = 0
+
+        print(
+            f"[webnovel-scraper] Proxy pool exhausted; reloading {len(self._proxies)} proxies and re-warming them..."
+        )
+        self._warm_proxies()
+
     def _next_proxy(self) -> tuple[dict[str, str] | None, int | None]:
         """Return (proxy_dict, 1-based proxy number) in round-robin order.
 
@@ -190,10 +205,20 @@ class NetworkClient:
         """
         with self._proxy_lock:
             if not self._proxies:
-                return None, None
-            num = self._proxy_index % len(self._proxies)  # 0-based position
-            proxy = self._proxies[num]
-            self._proxy_index += 1
+                need_reset = True
+            else:
+                need_reset = False
+                num = self._proxy_index % len(self._proxies)  # 0-based position
+                proxy = self._proxies[num]
+                self._proxy_index += 1
+        if need_reset:
+            self._reset_proxies()
+            with self._proxy_lock:
+                if not self._proxies:
+                    return None, None
+                num = self._proxy_index % len(self._proxies)
+                proxy = self._proxies[num]
+                self._proxy_index += 1
         return {"http": proxy, "https": proxy}, num + 1  # 1-based
 
     def get_last_proxy_num(self) -> int | None:
@@ -210,14 +235,20 @@ class NetworkClient:
         url = proxy.get("https") or proxy.get("http")
         if not url:
             return
+
+        emptied = False
         with self._proxy_lock:
             try:
                 self._proxies.remove(url)
                 print(
                     f"[webnovel-scraper] Removed dead proxy: {url} ({len(self._proxies)} remaining)"
                 )
+                emptied = len(self._proxies) == 0
             except ValueError:
                 pass  # already removed by another thread
+
+        if emptied:
+            self._reset_proxies()
 
     @staticmethod
     def _is_proxy_error(exc: BaseException) -> bool:
