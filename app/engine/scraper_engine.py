@@ -16,6 +16,7 @@ from app.engine.types import DebugInfo, DownloadTick, SearchCandidate, SearchOut
 from app.models import Book, Chapter
 from app.scrapers.base import BaseScraper
 from app.scrapers.freewebnovel import FreeWebNovelScraper
+from app.scrapers.novelfull import NovelFullScraper
 
 # Chapters are retried up to this many times total (1 initial + N-1 retries).
 _MAX_CHAPTER_ATTEMPTS = 4
@@ -59,6 +60,8 @@ class ScraperEngine:
         return cls(
             scrapers=[
                 FreeWebNovelScraper(client=client),
+                NovelFullScraper(client=client),
+                # NovelliveScraper(client=client), Cloudflare blocks
             ],
             client=client,
             max_workers=max_workers,
