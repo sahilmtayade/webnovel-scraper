@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from rapidfuzz import fuzz
 
-from app.engine.client import NetworkClient
+from app.engine.client import NetworkClient, ProxyMode
 from app.engine.rate import _DEFAULT_BACKOFF_FACTOR, _DEFAULT_RECOVERY_FACTOR
 from app.engine.types import DebugInfo, DownloadTick, SearchCandidate, SearchOutcome
 from app.models import Book, Chapter
@@ -50,12 +50,14 @@ class ScraperEngine:
         max_browser_sessions: int = 3,
         backoff_factor: float = _DEFAULT_BACKOFF_FACTOR,
         recovery_factor: float = _DEFAULT_RECOVERY_FACTOR,
+        proxy_mode: ProxyMode = "auto",
     ) -> ScraperEngine:
         client = NetworkClient(
             page_load_delay=page_load_delay,
             max_browser_sessions=max_browser_sessions,
             backoff_factor=backoff_factor,
             recovery_factor=recovery_factor,
+            proxy_mode=proxy_mode,
         )
         return cls(
             scrapers=[

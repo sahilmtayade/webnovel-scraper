@@ -87,6 +87,7 @@ These flags apply to every subcommand and go **before** the subcommand name:
 --page-delay SECS         Wait time after Playwright page load in seconds (default: 1.0)
 --workers N               Concurrent chapter-download workers (default: 8)
 --max-browser-sessions N  Max simultaneous headed browser windows for bot challenges (default: 3)
+--proxy-mode MODE         auto, off, or fallback (try normal connection first, then proxies)
 ```
 
 Example — download a chapter range with more workers and no confirmation prompt:
@@ -109,6 +110,11 @@ Lines starting with `#` are treated as comments.
 
 **Warm-up:** at startup all proxies are probed in parallel (8 s timeout). Dead ones are
 removed from the pool before any scraping begins.
+
+If you want to ignore proxies entirely, run with `--proxy-mode off`.
+
+If you want to use your normal connection first and only try proxies when that fails,
+run with `--proxy-mode fallback`.
 
 **Rotation:** proxies are used in round-robin order. Any proxy that produces a transport
 error during scraping (timeout, connect failure, bad response header, SSL error, etc.) is

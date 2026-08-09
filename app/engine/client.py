@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from dataclasses import dataclass as _plain_dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from curl_cffi import requests as cffi_requests
@@ -47,6 +47,7 @@ _PROXY_FILES: list[tuple[Path, str]] = [
     (_PROXY_FOLDER / "proxies_socks4.txt", "socks4"),
     (_PROXY_FOLDER / "proxies_socks5.txt", "socks5"),
 ]
+ProxyMode = Literal["auto", "off", "fallback"]
 
 
 @_plain_dataclass
@@ -81,12 +82,14 @@ class NetworkClient:
         max_browser_sessions: int = 3,
         backoff_factor: float = _DEFAULT_BACKOFF_FACTOR,
         recovery_factor: float = _DEFAULT_RECOVERY_FACTOR,
+        proxy_mode: ProxyMode = "auto",
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.page_load_delay = page_load_delay
         self.max_browser_sessions = max_browser_sessions
         self.backoff_factor = backoff_factor
         self.recovery_factor = recovery_factor
+        self.proxy_mode = proxy_mode
         self._rate_controllers: dict[str, RateController] = {}
         self._rc_lock = threading.Lock()
         self._cookies: dict[str, dict[str, str]] = self._load_cookies()
@@ -98,12 +101,15 @@ class NetworkClient:
         self._ws_lock = threading.Lock()
         self._worker_counter: int = 0
         # Proxy rotation — loaded once at startup from proxies.txt.
-        self._proxies: list[str] = self._load_proxies()
+        self._proxies: list[str] = self._load_proxies() if proxy_mode != "off" else []
         self._proxy_index: int = 0
         self._proxy_lock = threading.Lock()
         if self._proxies:
-            print(f"[webnovel-scraper] Loaded {len(self._proxies)} proxies (http/socks4/socks5)")
-            self._warm_proxies()
+            print(
+                f"[webnovel-scraper] Loaded {len(self._proxies)} proxies (mode: {self.proxy_mode})"
+            )
+            if self.proxy_mode in {"auto", "fallback"}:
+                self._warm_proxies()
 
     # ------------------------------------------------------------------
     # Proxy helpers
@@ -336,7 +342,9 @@ class NetworkClient:
         domain = urlparse(url).netloc.casefold()
         with self._rc_lock:
             if domain not in self._rate_controllers:
-                start = _PROXY_START_INTERVAL if self._proxies else None
+                start = (
+                    _PROXY_START_INTERVAL if self._proxies and self.proxy_mode == "auto" else None
+                )
                 self._rate_controllers[domain] = RateController(
                     domain,
                     start_interval=start,
@@ -367,6 +375,7 @@ class NetworkClient:
         rc = self._get_rate_controller(url)
         last_status, last_text = 429, ""
         browser_used = False
+        use_proxy_fallback = self.proxy_mode == "fallback" and bool(self._proxies)
 
         for attempt in range(3):
             # Wire up sleep tracking so the UI can show per-thread countdowns.
@@ -392,42 +401,83 @@ class NetworkClient:
             # wraps a dict in a RequestsCookieJar and then tries to call .value on
             # the jar object itself, raising an AttributeError.
             headers = self._cookie_header(url)
+            direct_response = None
 
-            # --- proxy retry inner loop -----------------------------------
-            # Try up to _MAX_PROXY_TRIES proxies for transport errors.
-            # These failures must NOT affect the rate-limit state.
-            response = None
-            _used_proxy_num: int | None = None
-            _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
-            for _ in range(_proxy_tries):
-                proxy, proxy_num = self._next_proxy()
+            if use_proxy_fallback:
                 try:
                     if method.upper() == "POST":
-                        response = cffi_requests.post(
+                        direct_response = cffi_requests.post(
                             url,
                             data=data or {},
                             headers=headers,
                             timeout=self.timeout_seconds,
                             allow_redirects=True,
                             impersonate="chrome120",
-                            proxies=proxy,
+                            proxies=None,
                         )
                     else:
-                        response = cffi_requests.get(
+                        direct_response = cffi_requests.get(
                             url,
                             headers=headers,
                             timeout=self.timeout_seconds,
                             allow_redirects=True,
                             impersonate="chrome120",
-                            proxies=proxy,
+                            proxies=None,
                         )
-                    _used_proxy_num = proxy_num
-                    break  # transport succeeded — exit proxy-retry loop
-                except Exception as exc:
-                    if proxy is not None and self._is_proxy_error(exc):
-                        self._blacklist_proxy(proxy)
-                        continue  # try the next proxy
-                    raise  # not a proxy issue — propagate normally
+                except Exception:
+                    direct_response = None
+
+                if direct_response is not None:
+                    direct_status = int(direct_response.status_code)
+                    direct_text = direct_response.text
+                    if direct_status != 429 and not self._is_bot_challenge(
+                        direct_status, direct_text
+                    ):
+                        response = direct_response
+                    else:
+                        response = None
+                else:
+                    response = None
+            else:
+                response = None
+
+            # --- proxy retry inner loop -----------------------------------
+            # Try up to _MAX_PROXY_TRIES proxies for transport errors.
+            # These failures must NOT affect the rate-limit state.
+            _used_proxy_num: int | None = None
+            if response is None:
+                _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
+                for _ in range(_proxy_tries):
+                    proxy, proxy_num = self._next_proxy()
+                    try:
+                        if method.upper() == "POST":
+                            response = cffi_requests.post(
+                                url,
+                                data=data or {},
+                                headers=headers,
+                                timeout=self.timeout_seconds,
+                                allow_redirects=True,
+                                impersonate="chrome120",
+                                proxies=proxy,
+                            )
+                        else:
+                            response = cffi_requests.get(
+                                url,
+                                headers=headers,
+                                timeout=self.timeout_seconds,
+                                allow_redirects=True,
+                                impersonate="chrome120",
+                                proxies=proxy,
+                            )
+                        _used_proxy_num = proxy_num
+                        break  # transport succeeded — exit proxy-retry loop
+                    except Exception as exc:
+                        if proxy is not None and self._is_proxy_error(exc):
+                            self._blacklist_proxy(proxy)
+                            continue  # try the next proxy
+                        raise  # not a proxy issue — propagate normally
+            if response is None and direct_response is not None:
+                response = direct_response
             # Store the winning proxy number in WorkerState for callers to read.
             with self._ws_lock:
                 ws = self._ws_get_or_create(tid)
@@ -483,25 +533,46 @@ class NetworkClient:
     def get_binary(self, url: str) -> bytes | None:
         rc = self._get_rate_controller(url)
         rc.wait()
+        use_proxy_fallback = self.proxy_mode == "fallback" and bool(self._proxies)
         response = None
-        _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
-        for _ in range(_proxy_tries):
-            proxy, _pn = self._next_proxy()
+        direct_response = None
+        if use_proxy_fallback:
             try:
-                response = cffi_requests.get(
+                direct_response = cffi_requests.get(
                     url,
                     headers=self._cookie_header(url),
                     timeout=self.timeout_seconds,
                     allow_redirects=True,
                     impersonate="chrome120",
-                    proxies=proxy,
+                    proxies=None,
                 )
-                break
-            except Exception as exc:
-                if proxy is not None and self._is_proxy_error(exc):
-                    self._blacklist_proxy(proxy)
-                    continue
-                raise
+            except Exception:
+                direct_response = None
+
+            if direct_response is not None and int(direct_response.status_code) < 400:
+                response = direct_response
+
+        if response is None:
+            _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
+            for _ in range(_proxy_tries):
+                proxy, _pn = self._next_proxy()
+                try:
+                    response = cffi_requests.get(
+                        url,
+                        headers=self._cookie_header(url),
+                        timeout=self.timeout_seconds,
+                        allow_redirects=True,
+                        impersonate="chrome120",
+                        proxies=proxy,
+                    )
+                    break
+                except Exception as exc:
+                    if proxy is not None and self._is_proxy_error(exc):
+                        self._blacklist_proxy(proxy)
+                        continue
+                    raise
+        if response is None and direct_response is not None:
+            response = direct_response
         if response is None:
             return None
         status = int(response.status_code)

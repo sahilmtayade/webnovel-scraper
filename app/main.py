@@ -21,6 +21,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from app.engine.client import ProxyMode
 from app.engine.epub import EpubBuilder
 from app.engine.scraper_engine import ScraperEngine
 from app.engine.types import DownloadTick
@@ -55,6 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         dest="max_browser_sessions",
         help="Max simultaneous headed browser windows for bot challenges (default: 3)",
+    )
+    parser.add_argument(
+        "--proxy-mode",
+        choices=("auto", "off", "fallback"),
+        default="auto",
+        help=(
+            "Proxy behavior: auto uses proxies when available, off never uses proxies, "
+            "fallback tries your normal connection first, then retries with proxies"
+        ),
     )
 
     subparsers = parser.add_subparsers(dest="command", required=False)
@@ -242,6 +252,7 @@ def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine
         "Recovery factor",
         f"{client.recovery_factor:.2f}  [dim](<1 — how fast to speed up on success)[/dim]",
     )
+    tbl.add_row("Proxy mode", client.proxy_mode)
     console.print(tbl)
     console.print("[dim]Press Enter to keep the current value.[/dim]\n")
 
@@ -266,6 +277,15 @@ def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine
         new_recovery = max(0.5, min(0.99, float(recovery_raw)))
     except ValueError:
         new_recovery = client.recovery_factor
+    proxy_mode_raw = _ask(console, "Proxy mode (auto/off/fallback)", default=client.proxy_mode)
+    if proxy_mode_raw.casefold() == "auto":
+        new_proxy_mode: ProxyMode = "auto"
+    elif proxy_mode_raw.casefold() == "off":
+        new_proxy_mode = "off"
+    elif proxy_mode_raw.casefold() == "fallback":
+        new_proxy_mode = "fallback"
+    else:
+        new_proxy_mode = client.proxy_mode
 
     changed = (
         new_workers != engine._max_workers
@@ -273,6 +293,7 @@ def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine
         or new_browsers != client.max_browser_sessions
         or new_backoff != client.backoff_factor
         or new_recovery != client.recovery_factor
+        or new_proxy_mode != client.proxy_mode
     )
     if not changed:
         console.print("[dim]No changes.[/dim]")
@@ -284,6 +305,7 @@ def _run_settings_menu(engine: ScraperEngine, console: Console) -> ScraperEngine
         max_browser_sessions=new_browsers or client.max_browser_sessions,
         backoff_factor=new_backoff,
         recovery_factor=new_recovery,
+        proxy_mode=new_proxy_mode,
     )
     console.print("[green]Settings updated.[/green]")
     return rebuilt
@@ -765,6 +787,7 @@ def main() -> int:
         page_load_delay=args.page_delay,
         max_workers=args.workers,
         max_browser_sessions=args.max_browser_sessions,
+        proxy_mode=args.proxy_mode,
     )
 
     if args.command is None:

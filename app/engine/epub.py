@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime
+import re
+import unicodedata
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -100,6 +102,37 @@ body {
     border-top: 1px solid #2e2e2e;
     padding-top: 1em;
 }
+
+/* ── properly styled chapter headings ───────────────────── */
+h1.chapter-heading {
+    margin: 0 0 0.5em;
+    font-size: 1.6em;
+    font-weight: 700;
+    color: #f2e9c5;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.3em;
+}
+
+div.chapter-meta {
+    margin: 0 0 1.5rem;
+    color: #b8a88f;
+    font-size: 0.95em;
+    line-height: 1.4;
+    font-style: italic;
+}
+
+.chapter-meta-item {
+    display: inline-block;
+    margin-right: 0.8em;
+}
+
+.chapter-meta-item:not(:last-child)::after {
+    content: "•";
+    margin-left: 0.8em;
+    color: #7c6d56;
+}
 """
 
 
@@ -136,7 +169,6 @@ class EpubBuilder:
                 epub_book.set_cover("cover.jpg", image)
                 has_cover_image = True
 
-        # shared stylesheet
         css_item = epub.EpubItem(
             uid="shared-css",
             file_name="styles/shared.css",
@@ -145,7 +177,6 @@ class EpubBuilder:
         )
         epub_book.add_item(css_item)
 
-        # front-matter pages
         cover_page = self._build_cover_page(book, has_cover_image)
         info_page = self._build_info_page(book)
         for page in (cover_page, info_page):
@@ -155,13 +186,13 @@ class EpubBuilder:
         epub_chapters: list[epub.EpubHtml] = []
         for chapter in book.chapters:
             if chapter.content_html is None:
-                continue  # skip stubs outside the requested range
+                continue
             epub_chapter = self._chapter_to_epub(chapter)
             epub_book.add_item(epub_chapter)
             epub_chapters.append(epub_chapter)
 
         epub_book.toc = (
-            epub.Link("cover.xhtml", "Cover", "cover"),
+            epub.Link("titlepage.xhtml", "Cover", "cover"),
             epub.Link("info.xhtml", "Book Info", "info"),
             *epub_chapters,
         )
@@ -173,8 +204,6 @@ class EpubBuilder:
         output_path = output_dir / f"{filename}.epub"
         epub.write_epub(str(output_path), epub_book)
         return output_path
-
-    # ── front-matter helpers ───────────────────────────────────────────────
 
     @staticmethod
     def _build_cover_page(book: Book, has_cover_image: bool) -> epub.EpubHtml:
@@ -189,7 +218,7 @@ class EpubBuilder:
             f"</div>"
             f"</body></html>"
         )
-        page = epub.EpubHtml(title="Cover", file_name="cover.xhtml", lang="en")
+        page = epub.EpubHtml(title="Cover", file_name="titlepage.xhtml", lang="en")
         page.content = content
         return page
 
@@ -230,27 +259,191 @@ class EpubBuilder:
         page.content = content
         return page
 
-    @staticmethod
-    def _chapter_to_epub(chapter: Chapter) -> epub.EpubHtml:
+    def _chapter_to_epub(self, chapter: Chapter) -> epub.EpubHtml:
         file_name = f"chapter-{chapter.index:05d}.xhtml"
         content = chapter.content_html or f"<p>{chapter.title}</p>"
-        cleaned = EpubBuilder._clean_html(content)
+        cleaned = self._clean_html(content)
 
         epub_chapter = epub.EpubHtml(title=chapter.title, file_name=file_name, lang="en")
         epub_chapter.content = cleaned
         return epub_chapter
 
-    @staticmethod
-    def _clean_html(raw_html: str) -> str:
+    def _clean_html(self, raw_html: str) -> str:
         soup = BeautifulSoup(raw_html, "html.parser")
-        for node in soup(["script", "style", "iframe", "noscript"]):
+
+        # 1. Clean out hidden tags entirely
+        for node in soup(["script", "style", "iframe", "noscript", "subtxt"]):
             node.decompose()
+
+        # 2. Rip out any hardcoded inline CSS (like style="font-size:18px;") so e-readers can actually scale text
+        for tag in soup.find_all(True):
+            if tag.has_attr("style"):
+                del tag["style"]
+
+        self._remove_watermarks(soup)
+        self._normalize_paragraphs(soup)
+        self._stylize_chapter_metadata(soup)
 
         if soup.body is not None:
             body_content = "".join(str(child) for child in soup.body.children)
             return f"<html><body>{body_content}</body></html>"
 
         return f"<html><body>{str(soup)}</body></html>"
+
+    def _remove_watermarks(self, soup: BeautifulSoup) -> None:
+        """Finds and removes hidden or unicode-obfuscated watermarks from the chapter body."""
+        watermark_domains = ["freewebnovel", "lightnovelpub", "novelhall", "readwn"]
+
+        for text_node in soup.find_all(string=True):
+            if not text_node.strip():
+                continue
+
+            normalized = unicodedata.normalize("NFKC", str(text_node)).lower()
+
+            if any(domain in normalized for domain in watermark_domains):
+                parent = text_node.parent
+                if (
+                    parent
+                    and parent.name not in ["body", "html", "div", "article", "section"]
+                    and len(parent.get_text(strip=True)) < len(normalized) + 15
+                ):
+                    parent.decompose()
+                    continue
+                text_node.extract()
+
+    def _normalize_paragraphs(self, soup: BeautifulSoup) -> None:
+        """If sites dump text separated by `<br>` directly into divs, wrap them in proper `<p>` tags."""
+        text_nodes = soup.find_all(string=True)
+        for text_node in text_nodes:
+            if not text_node.strip():
+                continue
+            parent = text_node.parent
+            if parent and parent.name in ["div", "article", "section", "body"]:
+                p = soup.new_tag("p")
+                text_node.replace_with(p)
+                p.append(text_node)
+
+    def _stylize_chapter_metadata(self, soup: BeautifulSoup) -> None:
+        """Uses Regex string matching to grab the Chapter headings no matter where they are nested."""
+        if soup.body is None:
+            return
+
+        # Explicit regex patterns for robust matching
+        chapter_pattern = re.compile(r"^\s*(Volume\s*\d+\s*)?(Chapter|Ch\.)\s*\d+.*$", re.I)
+        meta_pattern = re.compile(
+            r"^\s*(Translator|Editor|Proofreader|Author|Volume|Release|Published)\s*:.*$", re.I
+        )
+
+        block_tags = [
+            "p",
+            "div",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "section",
+            "article",
+            "blockquote",
+            "li",
+        ]
+
+        chapter_node = None
+
+        # 1. Find the FIRST element in the DOM whose literal text perfectly matches "Chapter N: ..."
+        for tag in soup.find_all(block_tags):
+            # Skip if it contains other block tags (we want the innermost <p> or <div> wrapper)
+            if tag.find(block_tags):
+                continue
+
+            text = tag.get_text(separator="\n", strip=True)
+            if not text:
+                continue
+
+            # Only match against the first line of the block's text
+            first_line = text.split("\n")[0].strip()
+            if chapter_pattern.match(first_line):
+                chapter_node = tag
+                break
+
+        if not chapter_node:
+            return
+
+        # Parse text lines out of the found node
+        raw_text = chapter_node.get_text(separator="\n", strip=True)
+        lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
+
+        heading_line = lines[0]
+        meta_lines = []
+        extra_body_lines = []
+
+        for line in lines[1:]:
+            if meta_pattern.match(line):
+                meta_lines.append(line)
+            else:
+                extra_body_lines.append(line)
+
+        nodes_to_remove = []
+
+        # 2. Look ahead at the next blocks to capture any subsequent metadata like "Translator: Nyoi-Bo..."
+        for next_tag in chapter_node.find_all_next(block_tags):
+            if next_tag.find(block_tags):
+                continue
+
+            tag_text = next_tag.get_text(separator="\n", strip=True)
+            if not tag_text:
+                continue
+
+            tag_lines = [line.strip() for line in tag_text.split("\n") if line.strip()]
+
+            # Does this next tag start with Editor/Translator metadata?
+            if meta_pattern.match(tag_lines[0]):
+                nodes_to_remove.append(next_tag)
+
+                hit_body = False
+                for line in tag_lines:
+                    if not hit_body and meta_pattern.match(line):
+                        meta_lines.append(line)
+                    else:
+                        hit_body = True
+                        extra_body_lines.append(line)
+
+                if hit_body:
+                    break  # Stop searching if we hit normal paragraph text
+            else:
+                break  # Stop searching once we reach the body of the chapter
+
+        # 3. Create correctly structured Replacement Tags
+        new_elements = []
+
+        h1 = soup.new_tag("h1", attrs={"class": "chapter-heading"})
+        h1.string = heading_line
+        new_elements.append(h1)
+
+        if meta_lines:
+            meta_div = soup.new_tag("div", attrs={"class": "chapter-meta"})
+            for i, line in enumerate(meta_lines):
+                span = soup.new_tag("span", attrs={"class": "chapter-meta-item"})
+                span.string = line
+                meta_div.append(span)
+                if i < len(meta_lines) - 1:
+                    meta_div.append(" ")
+            new_elements.append(meta_div)
+
+        if extra_body_lines:
+            for line in extra_body_lines:
+                p = soup.new_tag("p")
+                p.string = line
+                new_elements.append(p)
+
+        # 4. Perform the swap
+        for el in new_elements:
+            chapter_node.insert_before(el)
+
+        chapter_node.decompose()
+        for node in nodes_to_remove:
+            node.decompose()
 
     @staticmethod
     def _safe_filename(value: str) -> str:
