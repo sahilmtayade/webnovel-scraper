@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import datetime
 import re
-import unicodedata
 from pathlib import Path
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 from ebooklib import epub
 
 from app.engine.client import NetworkClient
@@ -103,24 +102,20 @@ body {
     padding-top: 1em;
 }
 
-/* ── properly styled chapter headings ───────────────────── */
-h1.chapter-heading {
-    margin: 0 0 0.5em;
-    font-size: 1.6em;
+.chapter-heading {
+    margin: 0 0 0.4em;
+    font-size: 1.1em;
     font-weight: 700;
     color: #f2e9c5;
     text-transform: none;
     letter-spacing: 0.02em;
-    border-bottom: 1px solid #333;
-    padding-bottom: 0.3em;
 }
 
-div.chapter-meta {
-    margin: 0 0 1.5rem;
+.chapter-meta {
+    margin: 0 0 1rem;
     color: #b8a88f;
     font-size: 0.95em;
     line-height: 1.4;
-    font-style: italic;
 }
 
 .chapter-meta-item {
@@ -134,6 +129,48 @@ div.chapter-meta {
     color: #7c6d56;
 }
 """
+
+# ── chapter-heading / metadata detection ────────────────────────────────────
+#
+# Scraped chapter HTML shows up in wildly different shapes depending on the
+# source site:
+#   - everything crammed into one <p> separated by <br> tags
+#   - one <p>/<div> per field
+#   - the "Chapter N" title inside an <h1>/<h2> instead of a <p>
+#   - translator/editor names wrapped in <strong>/<a>/<span> tags
+#
+# The matching below is line-based (rather than "does this whole node's text
+# match one big regex") specifically so all of the above are handled the
+# same way.
+_CHAPTER_HEADING_RE = re.compile(r"^(chapter\s*\d+|prologue|epilogue|interlude)\b", re.I)
+_CHAPTER_META_RE = re.compile(
+    r"^(translator|tl|editor|proofreader|pr|author|volume|release(?:d)?|published)\s*:"
+    r"|^(translated|edited|proofread)\s+by\b",
+    re.I,
+)
+# Splits a line like "Translator: X  Editor: Y" (no <br>, just run together)
+# into separate "Translator: X" / "Editor: Y" pieces for their own bullets.
+_META_SPLIT_RE = re.compile(
+    r"(?=\b(?:translator|tl|editor|proofreader|pr|author|volume|release(?:d)?|published)\s*:)",
+    re.I,
+)
+_HEADER_BLOCK_TAGS = {
+    "p",
+    "div",
+    "section",
+    "article",
+    "chapter-c",
+    "chapter-content",
+    "header",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+}
+_MAX_HEADER_NODES = 6
+_MAX_LINE_LEN = 200  # a "line" longer than this is prose, not a title/metadata field
 
 
 class EpubBuilder:
@@ -169,6 +206,7 @@ class EpubBuilder:
                 epub_book.set_cover("cover.jpg", image)
                 has_cover_image = True
 
+        # shared stylesheet
         css_item = epub.EpubItem(
             uid="shared-css",
             file_name="styles/shared.css",
@@ -177,6 +215,7 @@ class EpubBuilder:
         )
         epub_book.add_item(css_item)
 
+        # front-matter pages
         cover_page = self._build_cover_page(book, has_cover_image)
         info_page = self._build_info_page(book)
         for page in (cover_page, info_page):
@@ -186,13 +225,13 @@ class EpubBuilder:
         epub_chapters: list[epub.EpubHtml] = []
         for chapter in book.chapters:
             if chapter.content_html is None:
-                continue
+                continue  # skip stubs outside the requested range
             epub_chapter = self._chapter_to_epub(chapter)
             epub_book.add_item(epub_chapter)
             epub_chapters.append(epub_chapter)
 
         epub_book.toc = (
-            epub.Link("titlepage.xhtml", "Cover", "cover"),
+            epub.Link("cover.xhtml", "Cover", "cover"),
             epub.Link("info.xhtml", "Book Info", "info"),
             *epub_chapters,
         )
@@ -204,6 +243,8 @@ class EpubBuilder:
         output_path = output_dir / f"{filename}.epub"
         epub.write_epub(str(output_path), epub_book)
         return output_path
+
+    # ── front-matter helpers ───────────────────────────────────────────────
 
     @staticmethod
     def _build_cover_page(book: Book, has_cover_image: bool) -> epub.EpubHtml:
@@ -218,7 +259,7 @@ class EpubBuilder:
             f"</div>"
             f"</body></html>"
         )
-        page = epub.EpubHtml(title="Cover", file_name="titlepage.xhtml", lang="en")
+        page = epub.EpubHtml(title="Cover", file_name="cover.xhtml", lang="en")
         page.content = content
         return page
 
@@ -270,18 +311,11 @@ class EpubBuilder:
 
     def _clean_html(self, raw_html: str) -> str:
         soup = BeautifulSoup(raw_html, "html.parser")
-
-        # 1. Clean out hidden tags entirely
-        for node in soup(["script", "style", "iframe", "noscript", "subtxt"]):
+        for node in soup(["script", "style", "iframe", "noscript"]):
             node.decompose()
 
-        # 2. Rip out any hardcoded inline CSS (like style="font-size:18px;") so e-readers can actually scale text
-        for tag in soup.find_all(True):
-            if tag.has_attr("style"):
-                del tag["style"]
-
-        self._remove_watermarks(soup)
-        self._normalize_paragraphs(soup)
+        self._strip_noise(soup)
+        self._strip_ad_links(soup)
         self._stylize_chapter_metadata(soup)
 
         if soup.body is not None:
@@ -290,160 +324,194 @@ class EpubBuilder:
 
         return f"<html><body>{str(soup)}</body></html>"
 
-    def _remove_watermarks(self, soup: BeautifulSoup) -> None:
-        """Finds and removes hidden or unicode-obfuscated watermarks from the chapter body."""
-        watermark_domains = ["freewebnovel", "lightnovelpub", "novelhall", "readwn"]
+    @staticmethod
+    def _strip_noise(soup: BeautifulSoup) -> None:
+        """Drop HTML comments (often dead ad-script snippets) and the empty
+        ad-placeholder <div>s many scrapers leave behind, e.g.
+        ``<div style="..."><div id="bg-ssp-6327"></div></div>`` with no text
+        and no image. These carry no content but, left in place, they break
+        the "single wrapper child" check _content_root relies on to find
+        where the real paragraphs live, and they're pointless bloat in the
+        final EPUB regardless.
+        """
+        for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+            comment.extract()
 
-        for text_node in soup.find_all(string=True):
-            if not text_node.strip():
-                continue
-
-            normalized = unicodedata.normalize("NFKC", str(text_node)).lower()
-
-            if any(domain in normalized for domain in watermark_domains):
-                parent = text_node.parent
-                if (
-                    parent
-                    and parent.name not in ["body", "html", "div", "article", "section"]
-                    and len(parent.get_text(strip=True)) < len(normalized) + 15
-                ):
-                    parent.decompose()
+        changed = True
+        while changed:
+            changed = False
+            for div in soup.find_all("div"):
+                if div.find("img") is not None:
                     continue
-                text_node.extract()
+                if not div.get_text(strip=True) and div.find(True) is None:
+                    div.decompose()
+                    changed = True
 
-    def _normalize_paragraphs(self, soup: BeautifulSoup) -> None:
-        """If sites dump text separated by `<br>` directly into divs, wrap them in proper `<p>` tags."""
-        text_nodes = soup.find_all(string=True)
-        for text_node in text_nodes:
-            if not text_node.strip():
+    @staticmethod
+    def _strip_ad_links(soup: BeautifulSoup) -> None:
+        """Remove sponsored/affiliate ad links some scraped pages leave behind
+        (e.g. a bare <a rel="sponsored nofollow" href="..."/> with no visible
+        text), and collapse any wrapper element left empty afterward."""
+        for a_tag in soup.find_all("a"):
+            if a_tag.get_text(strip=True):
+                continue  # has visible text - leave it, could be legitimate content
+            rel = " ".join(a_tag.get("rel", []) or []).lower()
+            href = (a_tag.get("href") or "").lower()
+            if "sponsored" in rel or "nofollow" in rel or "/ads" in href or "doubleclick" in href:
+                parent = a_tag.parent
+                a_tag.decompose()
+                while (
+                    parent is not None
+                    and isinstance(parent, Tag)
+                    and parent.name not in {"body", "html"}
+                    and not parent.get_text(strip=True)
+                    and parent.find(True) is None
+                ):
+                    grandparent = parent.parent
+                    parent.decompose()
+                    parent = grandparent
+
+    @staticmethod
+    def _node_lines(node: Tag) -> list[str]:
+        """Flatten a node's text into lines.
+
+        Treats <br> as a line break; everything else (including text inside
+        nested <strong>/<a>/<span>/etc. tags) is joined onto the current
+        line. This is what lets "Chapter 1<br>Translator: X" in a single <p>
+        and "<strong>Translator:</strong> <a>X</a>" both resolve to the
+        same plain-text line, instead of breaking on nested tags or getting
+        split into fragments the way BeautifulSoup's own get_text(separator=...)
+        would.
+        """
+        lines: list[str] = []
+        current: list[str] = []
+
+        def walk(n: Tag) -> None:
+            for child in n.children:
+                if isinstance(child, Tag) and child.name == "br":
+                    lines.append("".join(current).strip())
+                    current.clear()
+                elif isinstance(child, Tag):
+                    walk(child)
+                elif isinstance(child, NavigableString):
+                    current.append(str(child))
+
+        walk(node)
+        lines.append("".join(current).strip())
+        return [ln for ln in lines if ln]
+
+    @staticmethod
+    def _content_root(body: Tag) -> Tag:
+        """Unwrap trivial single-child wrapper elements.
+
+        Scraped chapter markup very often looks like
+        ``<div id="chapter-content"><p>Chapter 1</p><p>...</p>...</div>``
+        rather than putting paragraphs directly under <body>. If we only
+        scan body's immediate children we'd see just that one wrapper div
+        and never find the heading/metadata paragraphs inside it. This
+        walks down through single-child div/section/article wrappers until
+        it finds the level where the actual paragraphs live as siblings.
+        """
+        root = body
+        while True:
+            kids = [
+                c for c in root.contents if not (isinstance(c, NavigableString) and not c.strip())
+            ]
+            if (
+                len(kids) == 1
+                and isinstance(kids[0], Tag)
+                and kids[0].name
+                in {
+                    "div",
+                    "section",
+                    "article",
+                }
+            ):
+                root = kids[0]
                 continue
-            parent = text_node.parent
-            if parent and parent.name in ["div", "article", "section", "body"]:
-                p = soup.new_tag("p")
-                text_node.replace_with(p)
-                p.append(text_node)
+            break
+        return root
 
     def _stylize_chapter_metadata(self, soup: BeautifulSoup) -> None:
-        """Uses Regex string matching to grab the Chapter headings no matter where they are nested."""
-        if soup.body is None:
+        """Turn a leading "Chapter N: Title" / "Translator: X" block into a
+        styled <h2 class="chapter-heading"> + <p class="chapter-meta">,
+        instead of leaving it as indistinguishable body paragraphs.
+        """
+        container: Tag | None = soup.body
+        if container is None:
+            # Some scrapers return an HTML fragment rooted at a <div> with no
+            # <html>/<body> wrapper. In that case, use the first top-level tag.
+            for child in soup.contents:
+                if isinstance(child, Tag):
+                    container = child
+                    break
+        if container is None:
             return
 
-        # Explicit regex patterns for robust matching
-        chapter_pattern = re.compile(r"^\s*(Volume\s*\d+\s*)?(Chapter|Ch\.)\s*\d+.*$", re.I)
-        meta_pattern = re.compile(
-            r"^\s*(Translator|Editor|Proofreader|Author|Volume|Release|Published)\s*:.*$", re.I
-        )
-
-        block_tags = [
-            "p",
-            "div",
-            "h1",
-            "h2",
-            "h3",
-            "h4",
-            "h5",
-            "h6",
-            "section",
-            "article",
-            "blockquote",
-            "li",
+        root = self._content_root(container)
+        body_children = [
+            node for node in root.contents if not (isinstance(node, str) and node.strip() == "")
         ]
+        if not body_children:
+            return
 
-        chapter_node = None
+        candidate_nodes: list[Tag] = []
+        heading_line: str | None = None
+        meta_lines: list[str] = []
 
-        # 1. Find the FIRST element in the DOM whose literal text perfectly matches "Chapter N: ..."
-        for tag in soup.find_all(block_tags):
-            # Skip if it contains other block tags (we want the innermost <p> or <div> wrapper)
-            if tag.find(block_tags):
-                continue
-
-            text = tag.get_text(separator="\n", strip=True)
-            if not text:
-                continue
-
-            # Only match against the first line of the block's text
-            first_line = text.split("\n")[0].strip()
-            if chapter_pattern.match(first_line):
-                chapter_node = tag
+        for node in body_children[:_MAX_HEADER_NODES]:
+            if isinstance(node, NavigableString):
+                break  # stray top-level text before any recognizable block - stop
+            if not isinstance(node, Tag) or node.name not in _HEADER_BLOCK_TAGS:
                 break
 
-        if not chapter_node:
+            node_lines = self._node_lines(node)
+
+            if not node_lines:
+                # empty spacer node (e.g. a blank <div>) - harmless, keep scanning
+                candidate_nodes.append(node)
+                continue
+
+            if any(len(ln) > _MAX_LINE_LEN for ln in node_lines):
+                break  # this node is prose, not a title/metadata field
+
+            if heading_line is None:
+                if not _CHAPTER_HEADING_RE.match(node_lines[0]):
+                    return  # no recognizable chapter heading up front - leave content as-is
+                heading_line = node_lines[0]
+                remaining = node_lines[1:]
+            else:
+                remaining = node_lines
+
+            if not all(_CHAPTER_META_RE.match(ln) for ln in remaining):
+                break  # first line that isn't metadata ends the header block
+
+            for ln in remaining:
+                # a site may put "Translator: X  Editor: Y" on one line with
+                # no <br> between them - split those into separate bullets
+                parts = [p.strip() for p in _META_SPLIT_RE.split(ln) if p.strip()]
+                meta_lines.extend(parts if parts else [ln])
+            candidate_nodes.append(node)
+
+        if heading_line is None or not candidate_nodes:
             return
 
-        # Parse text lines out of the found node
-        raw_text = chapter_node.get_text(separator="\n", strip=True)
-        lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
-
-        heading_line = lines[0]
-        meta_lines = []
-        extra_body_lines = []
-
-        for line in lines[1:]:
-            if meta_pattern.match(line):
-                meta_lines.append(line)
-            else:
-                extra_body_lines.append(line)
-
-        nodes_to_remove = []
-
-        # 2. Look ahead at the next blocks to capture any subsequent metadata like "Translator: Nyoi-Bo..."
-        for next_tag in chapter_node.find_all_next(block_tags):
-            if next_tag.find(block_tags):
-                continue
-
-            tag_text = next_tag.get_text(separator="\n", strip=True)
-            if not tag_text:
-                continue
-
-            tag_lines = [line.strip() for line in tag_text.split("\n") if line.strip()]
-
-            # Does this next tag start with Editor/Translator metadata?
-            if meta_pattern.match(tag_lines[0]):
-                nodes_to_remove.append(next_tag)
-
-                hit_body = False
-                for line in tag_lines:
-                    if not hit_body and meta_pattern.match(line):
-                        meta_lines.append(line)
-                    else:
-                        hit_body = True
-                        extra_body_lines.append(line)
-
-                if hit_body:
-                    break  # Stop searching if we hit normal paragraph text
-            else:
-                break  # Stop searching once we reach the body of the chapter
-
-        # 3. Create correctly structured Replacement Tags
-        new_elements = []
-
-        h1 = soup.new_tag("h1", attrs={"class": "chapter-heading"})
-        h1.string = heading_line
-        new_elements.append(h1)
+        heading_tag = soup.new_tag("h2", attrs={"class": "chapter-heading"})
+        heading_tag.string = heading_line
+        new_nodes: list[Tag] = [heading_tag]
 
         if meta_lines:
-            meta_div = soup.new_tag("div", attrs={"class": "chapter-meta"})
-            for i, line in enumerate(meta_lines):
-                span = soup.new_tag("span", attrs={"class": "chapter-meta-item"})
-                span.string = line
-                meta_div.append(span)
-                if i < len(meta_lines) - 1:
-                    meta_div.append(" ")
-            new_elements.append(meta_div)
+            meta_tag = soup.new_tag("p", attrs={"class": "chapter-meta"})
+            for line in meta_lines:
+                item = soup.new_tag("span", attrs={"class": "chapter-meta-item"})
+                item.string = line
+                meta_tag.append(item)
+            new_nodes.append(meta_tag)
 
-        if extra_body_lines:
-            for line in extra_body_lines:
-                p = soup.new_tag("p")
-                p.string = line
-                new_elements.append(p)
-
-        # 4. Perform the swap
-        for el in new_elements:
-            chapter_node.insert_before(el)
-
-        chapter_node.decompose()
-        for node in nodes_to_remove:
-            node.decompose()
+        first = candidate_nodes[0]
+        for node in candidate_nodes[1:]:
+            node.extract()
+        first.replace_with(*new_nodes)
 
     @staticmethod
     def _safe_filename(value: str) -> str:
