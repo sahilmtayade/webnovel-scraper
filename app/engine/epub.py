@@ -154,6 +154,8 @@ _META_SPLIT_RE = re.compile(
     r"(?=\b(?:translator|tl|editor|proofreader|pr|author|volume|release(?:d)?|published)\s*:)",
     re.I,
 )
+_GLUED_META_RE = re.compile(r"(?<=\S)(?=(?:Translator|Editor|Proofreader)\s*:)")
+_UPDATED_BY_RE = re.compile(r"\s*This chapter is updated by.*$", re.I)
 _HEADER_BLOCK_TAGS = {
     "p",
     "div",
@@ -517,8 +519,7 @@ class EpubBuilder:
             for ln in remaining:
                 # a site may put "Translator: X  Editor: Y" on one line with
                 # no <br> between them - split those into separate bullets
-                parts = [p.strip() for p in _META_SPLIT_RE.split(ln) if p.strip()]
-                meta_lines.extend(parts if parts else [ln])
+                meta_lines.extend(self._split_meta(ln))
             candidate_nodes.append(node)
 
         if heading_line is None or not candidate_nodes:
@@ -543,8 +544,17 @@ class EpubBuilder:
 
     @staticmethod
     def _split_meta(line: str) -> list[str]:
-        """Split "Title!Translator: X Editor: Y" into ["Title!", "Translator: X", "Editor: Y"]."""
-        parts = [p.strip() for p in _META_SPLIT_RE.split(line) if p.strip()]
+        """Split "Title!Translator: X Editor: Y" into ["Title!", "Translator: X", "Editor: Y"].
+
+        Also handles labels glued straight onto a word ("RegretTranslator: X",
+        capitalised labels only) and drops the site's trailing
+        "This chapter is updated by ..." advert.
+        """
+        line = _UPDATED_BY_RE.sub("", line)
+        line = _GLUED_META_RE.sub("\n", line)
+        parts: list[str] = []
+        for piece in line.split("\n"):
+            parts.extend(p.strip() for p in _META_SPLIT_RE.split(piece) if p.strip())
         return parts or [line]
 
     @staticmethod

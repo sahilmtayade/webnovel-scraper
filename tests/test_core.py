@@ -136,3 +136,11 @@ def test_inline_translator_is_split_from_heading():
     out = EpubBuilder(network_client=_NoNetwork())._clean_html(html)  # type: ignore[arg-type]
     assert '<h2 class="chapter-heading">Chapter 859: Cell Obliterating Cannon!</h2>' in out
     assert ">Translator: flycrane01<" in out and ">Editor: Millman97<" in out
+
+
+def test_glued_label_and_advert_are_cleaned():
+    parts = EpubBuilder._split_meta("Chapter 751: Never to RegretTranslator: flycrane01")
+    assert parts == ["Chapter 751: Never to Regret", "Translator: flycrane01"]
+    assert EpubBuilder._split_meta("Editor: Millman97This chapter is updated by .COM") == [
+        "Editor: Millman97"
+    ]
