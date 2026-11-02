@@ -22,10 +22,12 @@ from rich.table import Table
 from rich.text import Text
 
 from app.engine.client import ProxyMode
+from app.engine.content import has_body
 from app.engine.epub import EpubBuilder
 from app.engine.scraper_engine import ScraperEngine
 from app.engine.types import DownloadTick
-from app.models import Book
+from app.models import Book, Chapter
+from app.output import find_existing, merge_existing
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,6 +80,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory if you proceed to download (default: output)",
     )
     search_parser.add_argument(
+        "--into",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Update this existing EPUB (fills in missing / body-less chapters) instead of a new file",
+    )
+    search_parser.add_argument(
+        "--new",
+        action="store_true",
+        help="Always write a new EPUB, never offer to update an existing one",
+    )
+    search_parser.add_argument(
         "--yes",
         "-y",
         action="store_true",
@@ -105,6 +119,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("output"),
         help="Output directory for generated EPUB",
+    )
+    download_parser.add_argument(
+        "--into",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Update this existing EPUB (fills in missing / body-less chapters) instead of a new file",
+    )
+    download_parser.add_argument(
+        "--new",
+        action="store_true",
+        help="Always write a new EPUB, never offer to update an existing one",
     )
     download_parser.add_argument(
         "--yes",
@@ -149,6 +175,8 @@ def run_search(
     skip_confirm: bool = False,
     start_chapter: int | None = None,
     end_chapter: int | None = None,
+    into: Path | None = None,
+    force_new: bool = False,
 ) -> int:
     with Progress(
         SpinnerColumn(),
@@ -185,10 +213,12 @@ def run_search(
     # ── Selection prompt ─────────────────────────────────────────────────────
     while True:
         raw = console.input(
-            "[bold yellow]Enter # to download, or [dim]q[/dim] to quit:[/bold yellow] "
+            "[bold yellow]Enter # to download (Enter = 1), or [dim]q[/dim] to quit:[/bold yellow] "
         ).strip()
-        if raw.casefold() in {"q", "quit", ""}:
+        if raw.casefold() in {"q", "quit"}:
             return 0
+        if raw == "":
+            raw = "1"
         if raw.isdigit():
             choice = int(raw)
             if 1 <= choice <= len(candidates):
@@ -207,6 +237,8 @@ def run_search(
         skip_confirm=skip_confirm,
         start_chapter=start_chapter,
         end_chapter=end_chapter,
+        into=into,
+        force_new=force_new,
     )
 
 
@@ -400,7 +432,7 @@ def run_interactive(engine: ScraperEngine, console: Console) -> int:
         while True:
             raw = (
                 console.input(
-                    "[bold yellow]Enter # to select, "
+                    "[bold yellow]Enter # to select (Enter = 1), "
                     "[dim]s[/dim] to search again, "
                     "[dim]q[/dim] to quit[/bold yellow]: "
                 )
@@ -409,8 +441,10 @@ def run_interactive(engine: ScraperEngine, console: Console) -> int:
             )
             if raw in {"q", "quit"}:
                 return 0
-            if raw in {"s", "search", ""}:
+            if raw in {"s", "search"}:
                 break
+            if raw == "":
+                raw = "1"
             if raw.isdigit():
                 n = int(raw)
                 if 1 <= n <= len(candidates):
@@ -505,13 +539,12 @@ def run_debug(
     return 0
 
 
-def _confirm_chapter_list(book: Book, console: Console) -> bool:
+def _confirm_chapter_list(book: Book, chapters: list[Chapter], console: Console) -> bool:
     """Print the chapter roster and return True if the user confirms."""
-    chapters = book.chapters
     total = len(chapters)
 
     table = Table(
-        title=f"[bold]{book.title}[/bold]  ·  {total} chapters",
+        title=f"[bold]{book.title}[/bold]  ·  {total} chapters to download",
         show_lines=False,
         highlight=True,
     )
@@ -536,11 +569,52 @@ def _confirm_chapter_list(book: Book, console: Console) -> bool:
     console.print(table)
 
     answer = (
-        console.input(r"[bold yellow]Proceed with download?[/bold yellow] [dim]\[y/N][/dim] ")
+        console.input(r"[bold yellow]Proceed with download?[/bold yellow] [dim]\[Y/n][/dim] ")
         .strip()
         .casefold()
     )
-    return answer in {"y", "yes"}
+    return answer in {"", "y", "yes"}
+
+
+def _choose_output_target(
+    console: Console,
+    book: Book,
+    output_dir: Path,
+    force_new: bool,
+    skip_confirm: bool,
+) -> Path | None:
+    """Ask whether to write a new EPUB or update an existing one for *book*.
+
+    Returns the existing file to update, or ``None`` for a new file.
+    """
+    if force_new:
+        return None
+    matches = find_existing(book, output_dir)
+    if not matches:
+        return None
+    if skip_confirm:
+        console.print(
+            f"[dim]{len(matches)} existing EPUB(s) for this book in {output_dir}; "
+            "writing a new file (use --into FILE to update one).[/dim]"
+        )
+        return None
+
+    console.print("[bold]Existing EPUBs for this book:[/bold]")
+    for n, m in enumerate(matches, start=1):
+        note = (
+            f"[yellow]{m.incomplete} missing body[/yellow]"
+            if m.incomplete
+            else "[green]all complete[/green]"
+        )
+        console.print(
+            f"  [cyan]{n}[/cyan]. {m.path.name}  [dim]({m.total} chapters, {note}[dim])[/dim]"
+        )
+    console.print("  [cyan]0[/cyan]. Create a new file")
+    while True:
+        raw = _ask(console, "Output target", default="1")
+        if raw.isdigit() and 0 <= int(raw) <= len(matches):
+            return None if int(raw) == 0 else matches[int(raw) - 1].path
+        console.print(f"[red]Enter a number between 0 and {len(matches)}.[/red]")
 
 
 def run_download(
@@ -551,8 +625,10 @@ def run_download(
     skip_confirm: bool = False,
     start_chapter: int | None = None,
     end_chapter: int | None = None,
+    into: Path | None = None,
+    force_new: bool = False,
 ) -> int:
-    epub_builder = EpubBuilder()
+    epub_builder = EpubBuilder(network_client=engine._client)
 
     # ── Phase 1: metadata ────────────────────────────────────────────────────
     with Progress(
@@ -562,13 +638,37 @@ def run_download(
         transient=True,
     ) as spin:
         spin.add_task("", total=None)
-        book_meta = engine.fetch_book_meta(url)
+        try:
+            book_meta = engine.fetch_book_meta(url)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return 1
 
     total_chapters = len(book_meta.chapters)
     lo = (start_chapter - 1) if start_chapter is not None else 0
     hi = end_chapter if end_chapter is not None else total_chapters
     hi = min(hi, total_chapters)
-    total = hi - lo  # number of chapters we'll actually download
+
+    # ── Output target: new file, or update an existing EPUB ──────────────────
+    if into is not None and not into.is_file():
+        console.print(f"[red]--into file not found:[/red] {into}")
+        return 1
+    target = into or _choose_output_target(
+        console, book_meta, output_dir, force_new=force_new, skip_confirm=skip_confirm
+    )
+    preserved: frozenset[int] = frozenset()
+    if target is not None:
+        book_meta, preserved = merge_existing(book_meta, target)
+        console.print(
+            f"  Updating [bold]{target}[/bold]  ·  kept [cyan]{len(preserved)}[/cyan] stored chapters"
+        )
+    # Chapters in range that still need fetching (missing or without body text).
+    total = sum(1 for ch in book_meta.chapters[lo:hi] if not has_body(ch.content_html))
+    if total == 0:
+        console.print(
+            "[green]Nothing to download — every chapter in range already has content.[/green]"
+        )
+        return 0
 
     range_note = (
         f" [dim](chapters {lo + 1}–{hi})[/dim]"
@@ -582,7 +682,13 @@ def run_download(
     )
 
     # ── Confirmation ─────────────────────────────────────────────────────────
-    if not skip_confirm and not _confirm_chapter_list(book_meta, console):
+    to_fetch = [ch for ch in book_meta.chapters[lo:hi] if not has_body(ch.content_html)]
+    if len(to_fetch) < hi - lo:
+        console.print(
+            f"  [bold]{len(to_fetch)}[/bold] of {hi - lo} chapters in range need downloading "
+            f"({hi - lo - len(to_fetch)} already complete and will be kept)"
+        )
+    if not skip_confirm and not _confirm_chapter_list(book_meta, to_fetch, console):
         console.print("[yellow]Download cancelled.[/yellow]")
         return 1
 
@@ -619,6 +725,21 @@ def run_download(
         stats.append(f" ⚡ {rl_n} rate-limited ", style="yellow" if rl_n else "dim")
         stats.append(f" {speed:.1f} ch/min", style="cyan")
         # Worker badge is filled in later (after building the snapshot).
+
+        counts, pool_live, pool_parked = client.transport_stats()
+        transports = Text("  ")
+        for label, key in (
+            ("direct", "direct"),
+            ("http", "http"),
+            ("socks4", "socks4"),
+            ("socks5", "socks5"),
+            ("headless", "headless"),
+            ("window", "browser"),
+        ):
+            ok_n, total_n = counts.get(key, (0, 0))
+            transports.append(f"{label} {ok_n}/{total_n}  ", style="cyan" if total_n else "dim")
+        if pool_live or pool_parked:
+            transports.append(f"· proxies {pool_live} live / {pool_parked} parked", style="dim")
 
         # ── Per-thread worker status ───────────────────────────────────────
         now_m = time.monotonic()
@@ -698,6 +819,7 @@ def run_download(
         parts: list = [
             progress,
             stats,
+            transports,
             Rule("Workers", style="dim"),
             workers_body,
             Rule("Recent", style="dim"),
@@ -761,16 +883,23 @@ def run_download(
             _stop_refresh.set()
             _refresh_thread.join(timeout=0.5)
 
-    output_path = epub_builder.build(book=book, output_dir=output_dir)
-
-    placeholder = "<p>[Download failed"
-    succeeded = sum(
-        1 for ch in book.chapters if ch.content_html and not ch.content_html.startswith(placeholder)
+    # Chapters that were refetched must go through normal cleaning; only those
+    # still identical to what was read from the old EPUB are kept verbatim.
+    kept_verbatim = frozenset(
+        i
+        for i in preserved
+        if book.chapters[i - 1].content_html == book_meta.chapters[i - 1].content_html
     )
-    # Only count chapters we attempted (in range); stubs outside range have content_html=None
-    fetched_count = sum(1 for ch in book.chapters if ch.content_html is not None)
-    failed_count = fetched_count - succeeded
-    console.print(f"[green]EPUB generated:[/green] {output_path}")
+    output_path = epub_builder.build(
+        book=book, output_dir=output_dir, output_path=target, preserved=kept_verbatim
+    )
+
+    # Only count chapters in range; stubs outside range may have no content.
+    in_range = book.chapters[lo:hi]
+    succeeded = sum(1 for ch in in_range if has_body(ch.content_html))
+    failed_count = len(in_range) - succeeded
+    verb = "updated" if target is not None else "generated"
+    console.print(f"[green]EPUB {verb}:[/green] {output_path}")
     console.print(
         f"[green]✓ {succeeded} succeeded[/green]  "
         + (f"[red]✗ {failed_count} failed[/red]  " if failed_count else "")
@@ -807,6 +936,8 @@ def main() -> int:
             skip_confirm=args.yes,
             start_chapter=args.start,
             end_chapter=args.end,
+            into=args.into,
+            force_new=args.new,
         )
 
     if args.command == "download":
@@ -818,6 +949,8 @@ def main() -> int:
             skip_confirm=args.yes,
             start_chapter=args.start,
             end_chapter=args.end,
+            into=args.into,
+            force_new=args.new,
         )
 
     if args.command == "debug":

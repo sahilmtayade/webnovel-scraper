@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from rapidfuzz import fuzz
 
 from app.engine.client import NetworkClient, ProxyMode
+from app.engine.content import EmptyChapterError, has_body
 from app.engine.rate import _DEFAULT_BACKOFF_FACTOR, _DEFAULT_RECOVERY_FACTOR
 from app.engine.types import DebugInfo, DownloadTick, SearchCandidate, SearchOutcome
 from app.models import Book, Chapter
@@ -24,6 +25,15 @@ _MAX_CHAPTER_ATTEMPTS = 4
 _RETRY_BACKOFF_S: list[float] = [3.0, 8.0, 20.0]
 # Initial estimate of per-chapter fetch time used before real data is available.
 _EST_FETCH_TIME_S: float = 1.5
+# The final attempt escalates from the HTTP client to a Playwright browser.
+_BROWSER_ATTEMPT = _MAX_CHAPTER_ATTEMPTS
+# Body-less results in a row, on a non-proxied (direct) connection, before every
+# fetch is switched to the browser. The direct connection is what gets flagged,
+# so this is tracked per connection rather than per chapter.
+_DIRECT_FAIL_THRESHOLD = 3
+# While in browser mode, every Nth fetch is a plain-HTTP probe to see if the
+# direct connection has recovered.
+_BROWSER_PROBE_EVERY = 25
 # Exponential moving average weight for fetch-time updates (higher = faster adapt).
 _EMA_ALPHA: float = 0.2
 
@@ -41,6 +51,12 @@ class ScraperEngine:
         # Rolling average of observed chapter fetch time (updated via EMA).
         # Used to decide how many threads are actually useful.
         self._avg_fetch_time_s: float = _EST_FETCH_TIME_S
+        # Connection-level escalation state (see _fetch_validated).
+        self._mode_lock = threading.Lock()
+        self._direct_fail_streak = 0
+        self._browser_mode = False
+        self._browser_fetches = 0
+        self._on_status: Callable[[str], None] | None = None
 
     @classmethod
     def with_defaults(
@@ -68,6 +84,60 @@ class ScraperEngine:
             client=client,
             max_workers=max_workers,
         )
+
+    def _fetch_validated(
+        self, scraper: BaseScraper, ch: Chapter, force_browser: bool = False
+    ) -> Chapter:
+        """Fetch a chapter; a body-less result counts as a failure.
+
+        Escalation is tied to the connection, not the chapter: when requests go
+        out directly (proxy off, or fallback not using a proxy) and several come
+        back body-less in a row, the direct IP is likely flagged, so *all*
+        fetches switch to Playwright until a periodic plain probe succeeds.
+        Proxied requests rotate, so their failures do not trigger this.
+        """
+        with self._mode_lock:
+            use_browser = force_browser
+            if self._browser_mode:
+                self._browser_fetches += 1
+                if self._browser_fetches % _BROWSER_PROBE_EVERY != 0:
+                    use_browser = True
+
+        try:
+            result = scraper.fetch_chapter(ch.url, ch.index, use_browser=use_browser)
+            ok = has_body(result.content_html)
+        except Exception:
+            self._client.record_outcome(False)
+            self._record_direct(use_browser, ok=False)
+            raise
+        self._client.record_outcome(ok)
+        self._record_direct(use_browser, ok=ok)
+        if not ok:
+            raise EmptyChapterError(f"Chapter has no body text ({ch.title})")
+        return result
+
+    def _record_direct(self, used_browser: bool, ok: bool) -> None:
+        if used_browser or self._client.get_last_proxy_num() is not None:
+            return  # browser fetches and proxied requests say nothing about the direct IP
+        with self._mode_lock:
+            if ok:
+                self._direct_fail_streak = 0
+                if self._browser_mode:
+                    self._browser_mode = False
+                    self._notify("Direct connection recovered — back to plain HTTP.")
+                return
+            self._direct_fail_streak += 1
+            if self._direct_fail_streak >= _DIRECT_FAIL_THRESHOLD and not self._browser_mode:
+                self._browser_mode = True
+                self._browser_fetches = 0
+                self._notify(
+                    f"{_DIRECT_FAIL_THRESHOLD} body-less chapters in a row on the direct "
+                    "connection — switching to browser fetching."
+                )
+
+    def _notify(self, msg: str) -> None:
+        if self._on_status is not None:
+            self._on_status(msg)
 
     def _optimal_workers(self, url: str) -> int:
         """Compute the optimal thread count for *url*'s domain.
@@ -108,7 +178,16 @@ class ScraperEngine:
         scraper = self._resolve_scraper(url)
         if scraper is None:
             raise ValueError(f"No scraper registered for URL: {url}")
-        return scraper.fetch_book(url)
+        # A 200 response can still be a challenge/error page with no chapter list;
+        # retry a few times rather than silently returning an empty book.
+        for attempt in range(3):
+            book = scraper.fetch_book(url)
+            if book.chapters:
+                return book
+            time.sleep(2.0 * (attempt + 1))
+        raise ValueError(
+            f"No chapters found at {url} — the site may have served a challenge or error page"
+        )
 
     def download_chapters(
         self,
@@ -139,8 +218,15 @@ class ScraperEngine:
             chapters_to_fetch = all_chapters[lo:hi]
         else:
             chapters_to_fetch = list(all_chapters)
+        # Resume: chapters that already carry real body text (e.g. loaded from an
+        # existing EPUB) are kept as-is; only missing / body-less ones are fetched.
+        chapters_to_fetch = [c for c in chapters_to_fetch if not has_body(c.content_html)]
 
         total = len(chapters_to_fetch)
+        self._on_status = on_status
+        self._client.interrupted.clear()
+        self._direct_fail_streak = 0
+        self._browser_mode = False
         succeeded = 0
         failed = 0
         rate_limited = 0
@@ -180,10 +266,11 @@ class ScraperEngine:
             """Wait for an in-flight slot then fetch, keeping worker state updated."""
             _acquire_slot()
             try:
+                self._client._check_interrupted()
                 t0 = time.monotonic()
                 self._client.set_worker_label(ch.title)
                 try:
-                    result = scraper.fetch_chapter(ch.url, ch.index)
+                    result = self._fetch_validated(scraper, ch)
                 finally:
                     self._client.clear_worker()
                 # Capture proxy_num here, while still on the worker thread.
@@ -237,8 +324,11 @@ class ScraperEngine:
                         )
             except KeyboardInterrupt:
                 interrupted = True
+                self._client.interrupted.set()
                 if on_status is not None:
-                    on_status("Download interrupted — finalizing partial book...")
+                    on_status(
+                        "Interrupting — letting in-flight requests finish, then saving what we have…"
+                    )
                 for future in futures:
                     if not future.done():
                         future.cancel()
@@ -261,8 +351,9 @@ class ScraperEngine:
             backoff = _RETRY_BACKOFF_S[attempt_n - 2]
             is_last = attempt_n == _MAX_CHAPTER_ATTEMPTS
             if on_status is not None:
+                mode = " via browser" if attempt_n >= _BROWSER_ATTEMPT else ""
                 on_status(
-                    f"Retrying {len(to_retry)} chapter(s) "
+                    f"Retrying {len(to_retry)} chapter(s){mode} "
                     f"(attempt {attempt_n}/{_MAX_CHAPTER_ATTEMPTS}, "
                     f"waiting {backoff:.0f}s…)"
                 )
@@ -270,9 +361,10 @@ class ScraperEngine:
                 time.sleep(backoff)
             except KeyboardInterrupt:
                 interrupted = True
+                self._client.interrupted.set()
                 if on_status is not None:
                     on_status(
-                        "Download interrupted during retry backoff — finalizing partial book..."
+                        "Interrupting — letting in-flight requests finish, then saving what we have…"
                     )
                 break
 
@@ -283,7 +375,9 @@ class ScraperEngine:
                 try:
                     self._client.set_worker_label(stub.title)
                     try:
-                        result = scraper.fetch_chapter(stub.url, stub.index)
+                        result = self._fetch_validated(
+                            scraper, stub, force_browser=attempt_n >= _BROWSER_ATTEMPT
+                        )
                     finally:
                         self._client.clear_worker()
                     # Capture proxy_num here, while still on the (sequential retry) thread.
@@ -307,8 +401,11 @@ class ScraperEngine:
                     )
                 except KeyboardInterrupt:
                     interrupted = True
+                    self._client.interrupted.set()
                     if on_status is not None:
-                        on_status("Download interrupted during retry — finalizing partial book...")
+                        on_status(
+                            "Interrupting — letting in-flight requests finish, then saving what we have…"
+                        )
                     break
                 except Exception as exc:  # noqa: BLE001
                     error_msg = str(exc)
@@ -317,8 +414,13 @@ class ScraperEngine:
                         failed += 1
                         if "429" in error_msg or "rate" in error_msg.lower():
                             rate_limited += 1
-                        results[stub.index] = stub.model_copy(
-                            update={"content_html": f"<p>[Download failed: {error_msg}]</p>"}
+                        # Keep any previously saved content (resume); otherwise a placeholder.
+                        results[stub.index] = (
+                            stub
+                            if stub.content_html is not None
+                            else stub.model_copy(
+                                update={"content_html": f"<p>[Download failed: {error_msg}]</p>"}
+                            )
                         )
                     else:
                         still_failing.append((stub, error_msg))

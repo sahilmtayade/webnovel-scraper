@@ -23,8 +23,12 @@ class BaseScraper(ABC):
         """
 
     @abstractmethod
-    def fetch_chapter(self, url: str, index: int) -> Chapter:
-        """Fetch a single chapter and return it with ``content_html`` populated."""
+    def fetch_chapter(self, url: str, index: int, use_browser: bool = False) -> Chapter:
+        """Fetch a single chapter and return it with ``content_html`` populated.
+
+        ``use_browser=True`` asks the scraper to load the page through a real
+        browser (Playwright) instead of the plain HTTP client.
+        """
 
     @abstractmethod
     def can_handle(self, url: str) -> bool:

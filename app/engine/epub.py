@@ -177,7 +177,20 @@ class EpubBuilder:
     def __init__(self, network_client: NetworkClient | None = None) -> None:
         self.network_client = network_client or NetworkClient()
 
-    def build(self, book: Book, output_dir: Path) -> Path:
+    def build(
+        self,
+        book: Book,
+        output_dir: Path,
+        output_path: Path | None = None,
+        preserved: frozenset[int] = frozenset(),
+    ) -> Path:
+        """Write *book* to an EPUB.
+
+        ``output_path`` overwrites that exact file (used when updating an
+        existing EPUB); otherwise a new, non-clashing file is created in
+        *output_dir*.  ``preserved`` lists chapter indices whose HTML was read
+        back from an earlier EPUB and is already cleaned, so it is kept verbatim.
+        """
         output_dir.mkdir(parents=True, exist_ok=True)
 
         included_chapters = [c for c in book.chapters if c.content_html is not None]
@@ -203,7 +216,7 @@ class EpubBuilder:
         if book.cover_url:
             image = self.network_client.get_binary(str(book.cover_url))
             if image:
-                epub_book.set_cover("cover.jpg", image)
+                epub_book.set_cover("cover.jpg", image, create_page=False)
                 has_cover_image = True
 
         # shared stylesheet
@@ -226,7 +239,7 @@ class EpubBuilder:
         for chapter in book.chapters:
             if chapter.content_html is None:
                 continue  # skip stubs outside the requested range
-            epub_chapter = self._chapter_to_epub(chapter)
+            epub_chapter = self._chapter_to_epub(chapter, clean=chapter.index not in preserved)
             epub_book.add_item(epub_chapter)
             epub_chapters.append(epub_chapter)
 
@@ -240,7 +253,10 @@ class EpubBuilder:
         epub_book.add_item(epub.EpubNav())
 
         filename = self._safe_filename(titled)
-        output_path = output_dir / f"{filename}.epub"
+        if output_path is None:
+            output_path = self._unique_path(output_dir / f"{filename}.epub")
+        else:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
         epub.write_epub(str(output_path), epub_book)
         return output_path
 
@@ -300,10 +316,19 @@ class EpubBuilder:
         page.content = content
         return page
 
-    def _chapter_to_epub(self, chapter: Chapter) -> epub.EpubHtml:
+    @staticmethod
+    def _unique_path(path: Path) -> Path:
+        """Return *path*, or ``name (2).epub`` etc. if it already exists."""
+        candidate, n = path, 2
+        while candidate.exists():
+            candidate = path.with_name(f"{path.stem} ({n}){path.suffix}")
+            n += 1
+        return candidate
+
+    def _chapter_to_epub(self, chapter: Chapter, clean: bool = True) -> epub.EpubHtml:
         file_name = f"chapter-{chapter.index:05d}.xhtml"
         content = chapter.content_html or f"<p>{chapter.title}</p>"
-        cleaned = self._clean_html(content)
+        cleaned = self._clean_html(content) if clean else f"<html><body>{content}</body></html>"
 
         epub_chapter = epub.EpubHtml(title=chapter.title, file_name=file_name, lang="en")
         epub_chapter.content = cleaned

@@ -16,3 +16,5 @@ proxies/*
 
 responses/*
 /output
+
+graphify-out/

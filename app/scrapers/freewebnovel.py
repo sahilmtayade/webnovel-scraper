@@ -114,9 +114,9 @@ class FreeWebNovelScraper(BaseScraper):
             chapters=chapters,
         )
 
-    def fetch_chapter(self, url: str, index: int) -> Chapter:
+    def fetch_chapter(self, url: str, index: int, use_browser: bool = False) -> Chapter:
         """Fetch a single chapter and return it with content_html populated."""
-        html = self.client.get_text(url).text
+        html = self.client.get_text(url, force_browser=use_browser).text
         soup = BeautifulSoup(html, "html.parser")
 
         # Title from OG meta — most reliable

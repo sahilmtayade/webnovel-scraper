@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from dataclasses import dataclass as _plain_dataclass
 from pathlib import Path
@@ -28,6 +30,14 @@ _MAX_PROXY_TRIES = 8
 # Warm-up probe: short timeout and a reliable HTTPS target.
 _PROXY_PROBE_TIMEOUT: float = 8.0
 _PROXY_PROBE_URL = "https://www.google.com"
+# Free proxies flake: a proxy is parked only after this many consecutive transport
+# failures during real use (warm-up failures park immediately).
+_PROXY_STRIKES = 2
+# Parked proxies are re-probed in the background (never blocking a download) with a
+# more generous timeout than warm-up, and rejoin the pool when they answer.
+_REVIVE_INTERVAL_S = 30.0
+_REVIVE_BATCH = 60
+_REVIVE_TIMEOUT_S = 15.0
 # curl error codes that indicate a broken/dead proxy (not a server-side issue).
 _PROXY_CURL_ERRORS = (
     "curl: (5)",  # CURLE_COULDNT_RESOLVE_PROXY
@@ -48,6 +58,22 @@ _PROXY_FILES: list[tuple[Path, str]] = [
     (_PROXY_FOLDER / "proxies_socks5.txt", "socks5"),
 ]
 ProxyMode = Literal["auto", "off", "fallback"]
+
+
+class FetchInterruptedError(Exception):
+    """Raised by in-flight fetches once the user has interrupted the run."""
+
+
+class _DriverClosedFilter(logging.Filter):
+    """Ctrl-C also reaches Playwright's node driver, so browser threads that were
+    mid-flight log noisy "Connection closed while reading from the driver" asyncio
+    errors. They are expected during an interrupt; drop just those."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Connection closed while reading from the driver" not in record.getMessage()
+
+
+logging.getLogger("asyncio").addFilter(_DriverClosedFilter())
 
 
 @_plain_dataclass
@@ -104,6 +130,16 @@ class NetworkClient:
         self._proxies: list[str] = self._load_proxies() if proxy_mode != "off" else []
         self._proxy_index: int = 0
         self._proxy_lock = threading.Lock()
+        self._strikes: dict[str, int] = {}
+        self._parked: deque[str] = deque()
+        self._reviver_started = False
+        # Set by the engine on Ctrl-C so queued / in-flight fetches bail out quietly.
+        self.interrupted = threading.Event()
+        # Requests per transport, for the live status line.
+        self._stats_lock = threading.Lock()
+        # transport -> [chapters with a body, chapters attempted]
+        self._transport_counts: dict[str, list[int]] = {}
+        self._tls = threading.local()  # .transport = how this thread's last fetch went out
         if self._proxies:
             print(
                 f"[webnovel-scraper] Loaded {len(self._proxies)} proxies (mode: {self.proxy_mode})"
@@ -157,24 +193,11 @@ class NetworkClient:
         alive_lock = threading.Lock()
 
         def _probe(proxy_url: str) -> None:
-            proxy = {"http": proxy_url, "https": proxy_url}
-            try:
-                cffi_requests.get(
-                    _PROXY_PROBE_URL,
-                    timeout=_PROXY_PROBE_TIMEOUT,
-                    allow_redirects=True,
-                    impersonate="chrome120",
-                    proxies=proxy,
-                )
+            if self._probe_proxy(proxy_url, _PROXY_PROBE_TIMEOUT):
                 with alive_lock:
                     alive[0] += 1
-            except Exception as exc:
-                if self._is_proxy_error(exc):
-                    self._blacklist_proxy(proxy)
-                else:
-                    # Reachable but returned an unusual response — proxy is live.
-                    with alive_lock:
-                        alive[0] += 1
+            else:
+                self._blacklist_proxy({"http": proxy_url, "https": proxy_url}, immediate=True)
 
         snapshot = list(self._proxies)  # copy before any concurrent mutations
         threads = [threading.Thread(target=_probe, args=(p,), daemon=True) for p in snapshot]
@@ -189,6 +212,82 @@ class NetworkClient:
             f"{alive[0]}/{total} alive" + (f", {removed} removed" if removed else "") + "."
         )
 
+    def _check_interrupted(self) -> None:
+        if self.interrupted.is_set():
+            raise FetchInterruptedError("interrupted")
+
+    def record_outcome(self, ok: bool) -> None:
+        """Credit this thread's last fetch (success = chapter had a body) to its transport."""
+        kind = getattr(self._tls, "transport", None)
+        if kind is None:
+            return
+        with self._stats_lock:
+            entry = self._transport_counts.setdefault(kind, [0, 0])
+            entry[1] += 1
+            if ok:
+                entry[0] += 1
+
+    def transport_stats(self) -> tuple[dict[str, tuple[int, int]], int, int]:
+        """({transport: (ok, total)}, live proxies, parked proxies)."""
+        with self._stats_lock:
+            counts = {k: (v[0], v[1]) for k, v in self._transport_counts.items()}
+        with self._proxy_lock:
+            return counts, len(self._proxies), len(self._parked)
+
+    def _probe_proxy(self, proxy_url: str, timeout: float) -> bool:
+        """True if the proxy reaches the probe URL.
+
+        Only curl transport failures count as dead; a reachable proxy that
+        returns an odd response (e.g. 403) is alive.
+        """
+        try:
+            cffi_requests.get(
+                _PROXY_PROBE_URL,
+                timeout=timeout,
+                allow_redirects=True,
+                impersonate="chrome120",
+                proxies={"http": proxy_url, "https": proxy_url},
+            )
+        except Exception as exc:
+            return not self._is_proxy_error(exc)
+        return True
+
+    def _start_reviver(self) -> None:
+        with self._proxy_lock:
+            if self._reviver_started:
+                return
+            self._reviver_started = True
+        threading.Thread(target=self._revive_loop, daemon=True, name="proxy-reviver").start()
+
+    def _revive_one(self, url: str, results: dict[str, bool]) -> None:
+        results[url] = self._probe_proxy(url, _REVIVE_TIMEOUT_S)
+
+    def _revive_loop(self) -> None:
+        """Background: re-probe parked proxies and return the live ones to the pool."""
+        while True:
+            time.sleep(_REVIVE_INTERVAL_S)
+            with self._proxy_lock:
+                batch = [
+                    self._parked.popleft() for _ in range(min(_REVIVE_BATCH, len(self._parked)))
+                ]
+            if not batch:
+                continue
+            ok: dict[str, bool] = {}
+
+            threads = [
+                threading.Thread(target=self._revive_one, args=(u, ok), daemon=True) for u in batch
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            with self._proxy_lock:
+                for url in batch:
+                    if ok.get(url) and url not in self._proxies:
+                        self._proxies.append(url)
+                    else:
+                        self._parked.append(url)  # keep cycling; may recover later
+
     def _reset_proxies(self) -> None:
         """Reload proxy files and warm them up again when the pool is exhausted."""
         proxies = self._load_proxies()
@@ -198,6 +297,8 @@ class NetworkClient:
         with self._proxy_lock:
             self._proxies = proxies
             self._proxy_index = 0
+            self._parked.clear()
+            self._strikes.clear()
 
         print(
             f"[webnovel-scraper] Proxy pool exhausted; reloading {len(self._proxies)} proxies and re-warming them..."
@@ -209,6 +310,8 @@ class NetworkClient:
 
         Returns ``(None, None)`` when no proxies are loaded.
         """
+        if self.proxy_mode == "off":
+            return None, None
         with self._proxy_lock:
             if not self._proxies:
                 need_reset = True
@@ -236,23 +339,29 @@ class NetworkClient:
             ws = self.worker_states.get(tid)
             return ws.proxy_num if ws is not None else None
 
-    def _blacklist_proxy(self, proxy: dict[str, str]) -> None:
-        """Remove a dead proxy from the pool so it is never used again."""
+    def _blacklist_proxy(self, proxy: dict[str, str], immediate: bool = False) -> None:
+        """Record a transport failure; park the proxy once it has struck out.
+
+        Parked proxies are not discarded: the background reviver re-probes them.
+        ``immediate`` parks on the first failure (used by warm-up).
+        """
         url = proxy.get("https") or proxy.get("http")
         if not url:
             return
 
-        emptied = False
         with self._proxy_lock:
-            try:
-                self._proxies.remove(url)
-                print(
-                    f"[webnovel-scraper] Removed dead proxy: {url} ({len(self._proxies)} remaining)"
-                )
-                emptied = len(self._proxies) == 0
-            except ValueError:
-                pass  # already removed by another thread
+            if url not in self._proxies:
+                return  # already parked by another thread
+            strikes = self._strikes.get(url, 0) + 1
+            if not immediate and strikes < _PROXY_STRIKES:
+                self._strikes[url] = strikes
+                return
+            self._strikes.pop(url, None)
+            self._proxies.remove(url)
+            self._parked.append(url)
+            emptied = not self._proxies
 
+        self._start_reviver()
         if emptied:
             self._reset_proxies()
 
@@ -362,8 +471,13 @@ class NetworkClient:
         url: str,
         method: str = "GET",
         data: dict[str, str] | None = None,
+        force_browser: bool = False,
     ) -> NetworkResult:
         """Fetch *url* and return the response text.
+
+        ``force_browser`` skips the HTTP client and loads a GET through a
+        headless Playwright browser (used to escalate chapters that came back
+        without a body).
 
         Parameters
         ----------
@@ -373,11 +487,25 @@ class NetworkClient:
             Form fields to send with a POST request.  Ignored for GET.
         """
         rc = self._get_rate_controller(url)
+        self._check_interrupted()
+        if force_browser and method.upper() == "GET":
+            rc.wait()
+            self._check_interrupted()
+            with self._browser_sem:
+                result = self._solve_challenge_in_browser(url, headless=True, quiet=True)
+            self._store_cookies(url, result["cookies"])
+            return NetworkResult(
+                url=url,
+                status_code=result["status_code"],
+                text=result["text"],
+                used_browser_fallback=True,
+            )
         last_status, last_text = 429, ""
         browser_used = False
         use_proxy_fallback = self.proxy_mode == "fallback" and bool(self._proxies)
 
         for attempt in range(3):
+            self._check_interrupted()
             # Wire up sleep tracking so the UI can show per-thread countdowns.
             tid = threading.get_ident()
 
@@ -445,6 +573,7 @@ class NetworkClient:
             # Try up to _MAX_PROXY_TRIES proxies for transport errors.
             # These failures must NOT affect the rate-limit state.
             _used_proxy_num: int | None = None
+            _used_proxy_url: str | None = None
             if response is None:
                 _proxy_tries = max(1, _MAX_PROXY_TRIES) if self._proxies else 1
                 for _ in range(_proxy_tries):
@@ -470,6 +599,9 @@ class NetworkClient:
                                 proxies=proxy,
                             )
                         _used_proxy_num = proxy_num
+                        _used_proxy_url = proxy["http"] if proxy else None
+                        if proxy:
+                            self._strikes.pop(proxy["http"], None)
                         break  # transport succeeded — exit proxy-retry loop
                     except Exception as exc:
                         if proxy is not None and self._is_proxy_error(exc):
@@ -491,6 +623,9 @@ class NetworkClient:
 
             last_status = int(response.status_code)
             last_text = response.text
+            self._tls.transport = (
+                _used_proxy_url.split("://", 1)[0] if _used_proxy_url else "direct"
+            )
 
             if last_status == 429:
                 rc.throttled()
@@ -636,7 +771,9 @@ class NetworkClient:
         )
         return any(token in lowered for token in strict_tokens)
 
-    def _solve_challenge_in_browser(self, url: str) -> dict[str, Any]:
+    def _solve_challenge_in_browser(
+        self, url: str, headless: bool = False, quiet: bool = False
+    ) -> dict[str, Any]:
         """Open a visible browser so the user can pass a bot/Cloudflare challenge.
 
         Checks immediately after page load whether a challenge is present.  If
@@ -647,26 +784,42 @@ class NetworkClient:
         ``browser.close()`` is always called via a ``finally`` block so the
         window never lingers regardless of exceptions.
         """
-        print(
-            f"\n[webnovel-scraper] Bot challenge detected for {urlparse(url).netloc}.\n"
-            "  A browser window will open — if a challenge appears please wait for\n"
-            "  it to clear automatically (usually 3-10 seconds).\n"
-        )
+        if not quiet:
+            print(
+                f"\n[webnovel-scraper] Bot challenge detected for {urlparse(url).netloc}.\n"
+                "  A browser window will open — if a challenge appears please wait for\n"
+                "  it to clear automatically (usually 3-10 seconds).\n"
+            )
         timeout_ms = int(self.timeout_seconds * 1000)
         user_agent = (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
 
+        self._tls.transport = "headless" if headless else "browser"
+        self._check_interrupted()
+        try:
+            return self._run_browser(url, headless, quiet, user_agent, timeout_ms)
+        except Exception:
+            # Playwright errors after Ctrl-C (driver killed) are just the interrupt.
+            if self.interrupted.is_set():
+                raise FetchInterruptedError("interrupted") from None
+            raise
+
+    def _run_browser(
+        self, url: str, headless: bool, quiet: bool, user_agent: str, timeout_ms: int
+    ) -> dict[str, Any]:
         with Stealth().use_sync(sync_playwright()) as p:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=headless)
             try:
                 context = browser.new_context(user_agent=user_agent)
                 page = context.new_page()
 
                 status_code = 200
                 try:
-                    response = page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+                    response = page.goto(
+                        url, timeout=timeout_ms, wait_until="load" if quiet else "domcontentloaded"
+                    )
                     if response is not None:
                         status_code = int(response.status)
                 except PlaywrightTimeoutError:
@@ -675,14 +828,19 @@ class NetworkClient:
                 # Check immediately — if the browser landed on a normal page
                 # (no challenge) we can take the content and leave without any
                 # polling delay.
+                if quiet:
+                    # Forced-browser fetch: give client-side scripts time to render the body.
+                    page.wait_for_timeout(int(self.page_load_delay * 1000))
                 initial_text = page.content()
                 if not self._is_cf_challenge_in_browser(initial_text):
                     text = initial_text
                     raw_cookies = context.cookies()
                     cookies: dict[str, str] = {c["name"]: c["value"] for c in raw_cookies}
-                    print(
-                        "[webnovel-scraper] No challenge detected — using page content directly.\n"
-                    )
+                    if not quiet:
+                        print(
+                            "[webnovel-scraper] No challenge detected"
+                            " — using page content directly.\n"
+                        )
                     return {"status_code": status_code, "text": text, "cookies": cookies}
 
                 # Challenge IS present — poll until it clears or we time out.
@@ -702,5 +860,6 @@ class NetworkClient:
             finally:
                 browser.close()
 
-        print("[webnovel-scraper] Challenge cleared. Cookies saved for future requests.\n")
+        if not quiet:
+            print("[webnovel-scraper] Challenge cleared. Cookies saved for future requests.\n")
         return {"status_code": status_code, "text": text, "cookies": cookies}

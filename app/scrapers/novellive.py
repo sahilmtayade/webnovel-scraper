@@ -124,9 +124,9 @@ class NovelliveScraper(BaseScraper):
             chapters=chapters,
         )
 
-    def fetch_chapter(self, url: str, index: int) -> Chapter:
+    def fetch_chapter(self, url: str, index: int, use_browser: bool = False) -> Chapter:
         """Fetch a single chapter and return it with cleaned HTML content."""
-        html = self.client.get_text(url).text
+        html = self.client.get_text(url, force_browser=use_browser).text
         soup = BeautifulSoup(html, "html.parser")
 
         # Title lives in <span class="chapter"> on this site.
