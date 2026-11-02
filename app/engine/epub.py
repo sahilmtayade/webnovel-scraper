@@ -330,7 +330,8 @@ class EpubBuilder:
         content = chapter.content_html or f"<p>{chapter.title}</p>"
         cleaned = self._clean_html(content) if clean else f"<html><body>{content}</body></html>"
 
-        epub_chapter = epub.EpubHtml(title=chapter.title, file_name=file_name, lang="en")
+        title = self._split_meta(chapter.title)[0]  # keep "Translator: X" out of the TOC title
+        epub_chapter = epub.EpubHtml(title=title, file_name=file_name, lang="en")
         epub_chapter.content = cleaned
         return epub_chapter
 
@@ -503,8 +504,10 @@ class EpubBuilder:
             if heading_line is None:
                 if not _CHAPTER_HEADING_RE.match(node_lines[0]):
                     return  # no recognizable chapter heading up front - leave content as-is
-                heading_line = node_lines[0]
-                remaining = node_lines[1:]
+                # The title and "Translator: X" can be run together on one line
+                # ("Chapter 1: Foo!Translator: X Editor: Y"); peel the metadata off.
+                heading_line, *inline_meta = self._split_meta(node_lines[0])
+                remaining = [*inline_meta, *node_lines[1:]]
             else:
                 remaining = node_lines
 
@@ -537,6 +540,12 @@ class EpubBuilder:
         for node in candidate_nodes[1:]:
             node.extract()
         first.replace_with(*new_nodes)
+
+    @staticmethod
+    def _split_meta(line: str) -> list[str]:
+        """Split "Title!Translator: X Editor: Y" into ["Title!", "Translator: X", "Editor: Y"]."""
+        parts = [p.strip() for p in _META_SPLIT_RE.split(line) if p.strip()]
+        return parts or [line]
 
     @staticmethod
     def _safe_filename(value: str) -> str:

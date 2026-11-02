@@ -124,3 +124,15 @@ def test_direct_failures_switch_all_fetches_to_browser(monkeypatch):
     first_pass = scraper.calls[:8]
     assert [b for _, b in first_pass[:3]] == [False] * 3
     assert all(b for _, b in first_pass[3:])
+
+
+def test_inline_translator_is_split_from_heading():
+    html = (
+        '<div id="chapter-content">'
+        "<p>Chapter 859: Cell Obliterating Cannon!Translator: flycrane01 Editor: Millman97</p>"
+        + PROSE
+        + "</div>"
+    )
+    out = EpubBuilder(network_client=_NoNetwork())._clean_html(html)  # type: ignore[arg-type]
+    assert '<h2 class="chapter-heading">Chapter 859: Cell Obliterating Cannon!</h2>' in out
+    assert ">Translator: flycrane01<" in out and ">Editor: Millman97<" in out
